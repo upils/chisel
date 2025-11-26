@@ -1,9 +1,12 @@
 package manifestutil
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -14,6 +17,7 @@ import (
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/public/jsonwall"
 	"github.com/canonical/chisel/public/manifest"
+	"github.com/klauspost/compress/zstd"
 )
 
 const DefaultFilename = "manifest.wall"
@@ -32,6 +36,24 @@ func FindPaths(slices []*setup.Slice) map[string][]*setup.Slice {
 		}
 	}
 	return manifestSlices
+}
+
+// FindPathsInRelease finds all the paths marked with "generate:manifest"
+// for the given release.
+func FindPathsInRelease(r *setup.Release) []string {
+	manifests := []string{}
+	for _, pkg := range r.Packages {
+		for _, slice := range pkg.Slices {
+			for path, info := range slice.Contents {
+				if info.Generate == setup.GenerateManifest {
+					dir := strings.TrimSuffix(path, "**")
+					path = filepath.Join(dir, DefaultFilename)
+					manifests = append(manifests, path)
+				}
+			}
+		}
+	}
+	return manifests
 }
 
 type WriteOptions struct {
@@ -134,7 +156,7 @@ func manifestAddReport(dbw *jsonwall.DBWriter, report *Report) error {
 func unixPerm(mode fs.FileMode) (perm uint32) {
 	perm = uint32(mode.Perm())
 	if mode&fs.ModeSticky != 0 {
-		perm |= 01000
+		perm |= 0o1000
 	}
 	return perm
 }
@@ -338,5 +360,83 @@ func Validate(mfest *manifest.Manifest) (err error) {
 			return fmt.Errorf("content path %s has no matching entry in paths", path)
 		}
 	}
+	return nil
+}
+
+// Read reads, validates and returns a manifest.
+func Read(manifestPath string) (*manifest.Manifest, error) {
+	f, err := os.Open(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r, err := zstd.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	mfest, err := manifest.Read(r)
+	if err != nil {
+		return nil, err
+	}
+
+	err = Validate(mfest)
+	if err != nil {
+		return nil, err
+	}
+
+	return mfest, nil
+}
+
+func hash(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return nil, err
+	}
+
+	return h.Sum(nil), nil
+}
+
+func CheckManifests(reference string, targetDir string, manifests []string) error {
+	hashReference, err := hash(path.Join(targetDir, reference))
+	if err != nil {
+		return err
+	}
+
+	infoRef, err := os.Stat(reference)
+	if err != nil {
+		return err
+	}
+
+	modeRef := infoRef.Mode()
+
+	for _, m := range manifests {
+		infoManifest, err := os.Stat(m)
+		if err != nil {
+			return err
+		}
+
+		modeManifest := infoManifest.Mode()
+		if modeManifest != modeRef {
+			return fmt.Errorf("invalid manifest: permissions on %s (%s) are different from the reference manifest %s (%s)", m, modeManifest, reference, modeRef)
+		}
+
+		hashM, err := hash(m)
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(hashM, hashReference) {
+			return fmt.Errorf("invalid manifest: %s is inconsistent with %s", m, reference)
+		}
+	}
+
 	return nil
 }
