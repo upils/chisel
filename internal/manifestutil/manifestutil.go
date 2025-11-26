@@ -363,8 +363,38 @@ func Validate(mfest *manifest.Manifest) (err error) {
 	return nil
 }
 
-// Read reads, validates and returns a manifest.
-func Read(manifestPath string) (*manifest.Manifest, error) {
+// RootFSManifest extracts the manifest from a targetDir
+func RootFSManifest(release *setup.Release, targetDir string) (*manifest.Manifest, error) {
+	manifestPaths := FindPathsInRelease(release)
+	if len(manifestPaths) == 0 {
+		// No manifest in the release means it cannot produce a rootfs that can
+		// be recut. Treat this case as cutting a new rootfs.
+		return nil, nil
+	}
+
+	// Select the first manifest of the list as the reference one for now.
+	// Another heuristic could be used (ex. select the one from base-files_chisel).
+	refManifestPath := path.Join(targetDir, manifestPaths[0])
+	refManifest, err := read(refManifestPath)
+	if err != nil {
+		logf("Warning: Cannot read manifest %q from the root directory: %v", refManifestPath, err)
+		return nil, nil
+	}
+
+	err = checkConsistency(refManifestPath, targetDir, manifestPaths[1:])
+	if err != nil {
+		// TODO: When enabling the feature, error out.
+		logf("Warning: %v", err)
+		return nil, nil
+	}
+
+	// TODO
+	// validate given target rootdir consistent with the manifest
+	return refManifest, nil
+}
+
+// read reads, validates and returns a manifest.
+func read(manifestPath string) (*manifest.Manifest, error) {
 	f, err := os.Open(manifestPath)
 	if err != nil {
 		return nil, err
@@ -390,24 +420,9 @@ func Read(manifestPath string) (*manifest.Manifest, error) {
 	return mfest, nil
 }
 
-func hash(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return nil, err
-	}
-
-	return h.Sum(nil), nil
-}
-
-// VerifyManifests checks consistency between a list of manifests and a 
+// checkConsistency checks consistency between a list of manifests and a
 // reference one.
-func VerifyManifests(reference string, targetDir string, manifests []string) error {
+func checkConsistency(reference string, targetDir string, manifests []string) error {
 	hashReference, err := hash(path.Join(targetDir, reference))
 	if err != nil {
 		return err
@@ -443,6 +458,22 @@ func VerifyManifests(reference string, targetDir string, manifests []string) err
 	return nil
 }
 
+func hash(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return nil, err
+	}
+
+	return h.Sum(nil), nil
+}
+
+// SliceKeys returns setup.SliceKeys from a manifest.
 func SliceKeys(m *manifest.Manifest) []setup.SliceKey {
 	sliceKeys := []setup.SliceKey{}
 	m.IterateSlices("", func(slice *manifest.Slice) error {

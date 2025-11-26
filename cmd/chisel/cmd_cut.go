@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"time"
@@ -77,16 +76,25 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	previousSliceKeys, err := canRecut(release, cmd.RootDir)
+	rootfsPath, err := preExistingRootfs(cmd.RootDir)
 	if err != nil {
 		return err
 	}
-	// TODO validate rootfs
 
-	// Merge with explicitly requested slice keys
-	for _, s := range previousSliceKeys {
-		if !slices.Contains(sliceKeys, s) {
-			sliceKeys = append(sliceKeys, s)
+	if len(rootfsPath) > 0 {
+		manifest, err := manifestutil.RootFSManifest(release, rootfsPath)
+		if err != nil {
+			return err
+		}
+
+		// Merge the slice keys used to build the existing rootfs with the ones
+		// explicitly requested slice.
+		// Previous slice keys contains both explicitly requested slices and slices
+		// resolved following essentials.
+		for _, s := range manifestutil.SliceKeys(manifest) {
+			if !slices.Contains(sliceKeys, s) {
+				sliceKeys = append(sliceKeys, s)
+			}
 		}
 	}
 
@@ -146,55 +154,27 @@ func (cmd *cmdCut) Execute(args []string) error {
 	return err
 }
 
-// canRecut determines if the existing target was produced by chisel.
-// If possible extracts the list of slices used to produce it.
-func canRecut(release *setup.Release, rootdir string) ([]setup.SliceKey, error) {
+// preExistingRootfs determines if the target directory was produced by chisel.
+func preExistingRootfs(rootdir string) (string, error) {
 	// Get targetDir path
 	// Note: This is already done in `slicer.Run`. Extract it and avoid doing it twice?
 	targetDir := filepath.Clean(rootdir)
 	if !filepath.IsAbs(targetDir) {
 		dir, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("cannot obtain current directory: %w", err)
+			return "", fmt.Errorf("cannot obtain current directory: %w", err)
 		}
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
 	entries, err := os.ReadDir(targetDir)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read root directory %q: %v", targetDir, err)
+		return "", fmt.Errorf("cannot read root directory %q: %v", targetDir, err)
 	}
 
 	if len(entries) == 0 {
-		// Empty dir, so cutting a new rootfs
-		return nil, nil
+		return "", nil
 	}
 
-	manifests := manifestutil.FindPathsInRelease(release)
-	if len(manifests) == 0 {
-		// No manifest in the release means it cannot produce a rootfs that can
-		// be recut. Treat this case as cutting a new rootfs.
-		return nil, nil
-	}
-
-	// Select the first manifest of the list as the reference one for now.
-	// Another heuristic could be used (ex. select the one from base-files_chisel).
-	refManifestPath := path.Join(targetDir, manifests[0])
-	refManifest, err := manifestutil.Read(refManifestPath)
-	if err != nil {
-		logf("Warning: Cannot read manifest %q from the root directory: %v", refManifestPath, err)
-		return nil, nil
-	}
-
-	err = manifestutil.VerifyManifests(refManifestPath, targetDir, manifests[1:])
-	if err != nil {
-		// TODO: When enabling the feature, error out.
-		logf("Warning: %v", err)
-		return nil, nil
-	}
-
-	// TODO
-	// validate given target rootdir with manifest content
-
-	return manifestutil.SliceKeys(refManifest), nil
+	return targetDir, nil
 }
