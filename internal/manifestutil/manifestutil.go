@@ -405,7 +405,9 @@ func hash(path string) ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-func CheckManifests(reference string, targetDir string, manifests []string) error {
+// VerifyManifests checks consistency between a list of manifests and a 
+// reference one.
+func VerifyManifests(reference string, targetDir string, manifests []string) error {
 	hashReference, err := hash(path.Join(targetDir, reference))
 	if err != nil {
 		return err
@@ -439,4 +441,18 @@ func CheckManifests(reference string, targetDir string, manifests []string) erro
 	}
 
 	return nil
+}
+
+func SliceKeys(m *manifest.Manifest) []setup.SliceKey {
+	sliceKeys := []setup.SliceKey{}
+	m.IterateSlices("", func(slice *manifest.Slice) error {
+		sk, err := apacheutil.ParseSliceKey(slice.Name)
+		if err != nil {
+			return err
+		}
+		sliceKeys = append(sliceKeys, sk)
+		return nil
+	})
+
+	return sliceKeys
 }

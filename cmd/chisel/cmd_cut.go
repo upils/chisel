@@ -10,13 +10,11 @@ import (
 
 	"github.com/jessevdk/go-flags"
 
-	"github.com/canonical/chisel/internal/apacheutil"
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
-	"github.com/canonical/chisel/public/manifest"
 )
 
 var shortCutHelp = "Cut a tree with selected slices"
@@ -79,10 +77,12 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	previousSliceKeys, err := recut(release, cmd.RootDir)
+	previousSliceKeys, err := canRecut(release, cmd.RootDir)
 	if err != nil {
 		return err
 	}
+	// TODO validate rootfs
+
 	// Merge with explicitly requested slice keys
 	for _, s := range previousSliceKeys {
 		if !slices.Contains(sliceKeys, s) {
@@ -146,16 +146,11 @@ func (cmd *cmdCut) Execute(args []string) error {
 	return err
 }
 
-func recut(release *setup.Release, rootdir string) ([]setup.SliceKey, error) {
-	manifests := manifestutil.FindPathsInRelease(release)
-
-	if len(manifests) == 0 {
-		// TODO: When enabling the feature, error out if no manifest found.
-		// For now do nothing.
-		return nil, nil
-	}
-
+// canRecut determines if the existing target was produced by chisel.
+// If possible extracts the list of slices used to produce it.
+func canRecut(release *setup.Release, rootdir string) ([]setup.SliceKey, error) {
 	// Get targetDir path
+	// Note: This is already done in `slicer.Run`. Extract it and avoid doing it twice?
 	targetDir := filepath.Clean(rootdir)
 	if !filepath.IsAbs(targetDir) {
 		dir, err := os.Getwd()
@@ -175,37 +170,31 @@ func recut(release *setup.Release, rootdir string) ([]setup.SliceKey, error) {
 		return nil, nil
 	}
 
-	// Root dir is not empty, cutting on top of an existing rootfs.
-	
-	// Select the first manifest of the list as the reference one for now.
-	// Another heuristic could be used (ex. select the one from base-files_chisel).
-	firstManifestPath := path.Join(targetDir, manifests[0])
-	firstManifest, err := manifestutil.Read(firstManifestPath)
-	if err != nil {
-		logf("Warning: Cannot read manifest %q from the root directory: %v", firstManifestPath, err)
+	manifests := manifestutil.FindPathsInRelease(release)
+	if len(manifests) == 0 {
+		// No manifest in the release means it cannot produce a rootfs that can
+		// be recut. Treat this case as cutting a new rootfs.
 		return nil, nil
 	}
-	
-	err = manifestutil.CheckManifests(firstManifestPath, targetDir, manifests[1:])
+
+	// Select the first manifest of the list as the reference one for now.
+	// Another heuristic could be used (ex. select the one from base-files_chisel).
+	refManifestPath := path.Join(targetDir, manifests[0])
+	refManifest, err := manifestutil.Read(refManifestPath)
+	if err != nil {
+		logf("Warning: Cannot read manifest %q from the root directory: %v", refManifestPath, err)
+		return nil, nil
+	}
+
+	err = manifestutil.VerifyManifests(refManifestPath, targetDir, manifests[1:])
 	if err != nil {
 		// TODO: When enabling the feature, error out.
 		logf("Warning: %v", err)
 		return nil, nil
 	}
-	
+
 	// TODO
 	// validate given target rootdir with manifest content
 
-	// Get slices used to build the rootfs
-	sliceKeys := []setup.SliceKey{}
-	firstManifest.IterateSlices("", func(slice *manifest.Slice) error {
-		sk, err := apacheutil.ParseSliceKey(slice.Name)
-		if err != nil {
-			return err
-		}
-		sliceKeys = append(sliceKeys, sk)
-		return nil
-	})
-
-	return sliceKeys, nil
+	return manifestutil.SliceKeys(refManifest), nil
 }
