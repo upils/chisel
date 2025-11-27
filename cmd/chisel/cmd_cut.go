@@ -84,7 +84,8 @@ func (cmd *cmdCut) Execute(args []string) error {
 	if len(rootfsPath) > 0 {
 		manifest, err := manifestutil.RootFSManifest(release, rootfsPath)
 		if err != nil {
-			return err
+			// TODO: When enabling the feature, error out.
+			logf("Warning: %v", err)
 		}
 
 		// Merge the slice keys used to build the existing rootfs with the ones

@@ -2,6 +2,7 @@ package manifestutil
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/canonical/chisel/internal/apacheutil"
 	"github.com/canonical/chisel/internal/archive"
@@ -375,26 +377,25 @@ func RootFSManifest(release *setup.Release, targetDir string) (*manifest.Manifes
 	// Select the first manifest of the list as the reference one for now.
 	// Another heuristic could be used (ex. select the one from base-files_chisel).
 	refManifestPath := path.Join(targetDir, manifestPaths[0])
-	refManifest, err := read(refManifestPath)
+	refManifest, err := load(refManifestPath)
 	if err != nil {
-		logf("Warning: Cannot read manifest %q from the root directory: %v", refManifestPath, err)
-		return nil, nil
+		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", refManifestPath, err)
 	}
 
 	err = checkConsistency(refManifestPath, targetDir, manifestPaths[1:])
 	if err != nil {
-		// TODO: When enabling the feature, error out.
-		logf("Warning: %v", err)
-		return nil, nil
+		return nil, err
 	}
 
-	// TODO
-	// validate given target rootdir consistent with the manifest
+	err = validateRootfs(refManifest, targetDir)
+	if err != nil {
+		return nil, err
+	}
 	return refManifest, nil
 }
 
-// read reads, validates and returns a manifest.
-func read(manifestPath string) (*manifest.Manifest, error) {
+// load reads, validates and returns a manifest.
+func load(manifestPath string) (*manifest.Manifest, error) {
 	f, err := os.Open(manifestPath)
 	if err != nil {
 		return nil, err
@@ -486,4 +487,73 @@ func SliceKeys(m *manifest.Manifest) []setup.SliceKey {
 	})
 
 	return sliceKeys
+}
+
+func validateRootfs(m *manifest.Manifest, rootDir string) error {
+	return m.IteratePaths("", func(path *manifest.Path) error {
+		p := filepath.Join(rootDir, path.Path)
+		info, err := os.Lstat(p)
+		if err != nil {
+			return err
+		}
+		mode := info.Mode()
+		if mode.String() != path.Mode {
+			return fmt.Errorf("tampered content: %q mode mismatch: %s recorded, %s observed", path.Path, path.Mode, mode)
+		}
+
+		// Verify directories
+		if strings.HasSuffix(path.Path, "/") {
+			if !info.IsDir() {
+				return fmt.Errorf("tampered content: %q expected to be a directory", path.Path)
+			}
+			// Nothing more to check
+			return nil
+		}
+
+		// Verify symlinks
+		if len(path.Link) > 0 {
+			link, err := os.Readlink(p)
+			if err != nil {
+				return err
+			}
+
+			if link != path.Link {
+				return fmt.Errorf("tampered content: %q link destination mismatch: %s recorded, %s observed", path.Path, path.Link, link)
+			}
+			return nil
+		}
+
+		if !mode.IsRegular() {
+			return fmt.Errorf("tampered content: unrecognized type of file.")
+		}
+
+		// Verify hardlinks
+		if path.Inode != 0 {
+			stat, ok := info.Sys().(*syscall.Stat_t)
+			if !ok {
+				return fmt.Errorf("cannot get syscall stat info for %q", path.Path)
+			}
+			nLink := stat.Nlink
+			if nLink != path.Inode {
+				return fmt.Errorf("tampered content: %q hardlinkq count mismatch: %s recorded, %s observed", path.Path, path.Inode, nLink)
+			}
+		}
+
+		// Common verification for regular files
+		// TODO skip for manifest.wall
+
+		h, err := hash(p)
+		if err != nil {
+			return err
+		}
+		hString := hex.EncodeToString(h)
+		if len(path.FinalSHA256) > 0 {
+			if hString != path.FinalSHA256 {
+				return fmt.Errorf("tampered file %q, hash mismatch: %s recorded, %s observed", path.Path, path.FinalSHA256, hString)
+			}
+		} else if len(path.SHA256) > 0 && hString != path.SHA256 {
+			return fmt.Errorf("tampered file %q, sha256 mismatch: %s recorded, %s observed", path.Path, path.SHA256, hString)
+		}
+		return nil
+	})
 }
