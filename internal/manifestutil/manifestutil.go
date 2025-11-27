@@ -494,6 +494,11 @@ func SliceKeys(m *manifest.Manifest) []setup.SliceKey {
 // This function works under the assumption the manifest was previously
 // validated.
 func validateRootfs(m *manifest.Manifest, rootDir string) error {
+	hardLinkGroups, err := groupHardlinks(m)
+	if err != nil {
+		return err
+	}
+
 	return m.IteratePaths("", func(path *manifest.Path) error {
 		p := filepath.Join(rootDir, path.Path)
 		info, err := os.Lstat(p)
@@ -532,14 +537,21 @@ func validateRootfs(m *manifest.Manifest, rootDir string) error {
 
 		// Verify hardlinks
 		if path.Inode != 0 {
+			paths, ok := hardLinkGroups[path.Inode]
+			if !ok {
+				return fmt.Errorf("cannot find paths associated to this inode: %d", path.Inode)
+			}
+
 			stat, ok := info.Sys().(*syscall.Stat_t)
 			if !ok {
 				return fmt.Errorf("cannot get syscall stat info for %q", path.Path)
 			}
 			nLink := stat.Nlink
-			if nLink != path.Inode {
-				logf("tampered content: %q hardlinks count mismatch: %d recorded, %d observed", path.Path, path.Inode, nLink)
-				// return fmt.Errorf("tampered content: %q hardlinks count mismatch: %d recorded, %d observed", path.Path, path.Inode, nLink)
+
+			if int(nLink) != len(paths) {
+				// Working under the assumption no hardlink not managed by chisel
+				// and pointing at a chisel-managed file was added.
+				return fmt.Errorf("tampered content: %q hardlinks count mismatch: %d recorded, %d observed", path.Path, len(paths), nLink)
 			}
 		}
 
@@ -559,4 +571,24 @@ func validateRootfs(m *manifest.Manifest, rootDir string) error {
 		}
 		return nil
 	})
+}
+
+// groupHardlinks groups hardlink paths by inode.
+func groupHardlinks(m *manifest.Manifest) (map[uint64][]*manifest.Path, error) {
+	hardLinkGroups := make(map[uint64][]*manifest.Path)
+
+	err := m.IteratePaths("", func(path *manifest.Path) error {
+		inode := path.Inode
+		if inode == 0 {
+			return nil
+		}
+		hardLinkGroups[inode] = append(hardLinkGroups[inode], path)
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return hardLinkGroups, nil
 }
