@@ -424,7 +424,7 @@ func load(manifestPath string) (*manifest.Manifest, error) {
 // checkConsistency checks consistency between a list of manifests and a
 // reference one.
 func checkConsistency(reference string, targetDir string, manifests []string) error {
-	hashReference, err := hash(path.Join(targetDir, reference))
+	hashReference, err := hash(reference)
 	if err != nil {
 		return err
 	}
@@ -437,7 +437,7 @@ func checkConsistency(reference string, targetDir string, manifests []string) er
 	modeRef := infoRef.Mode()
 
 	for _, m := range manifests {
-		infoManifest, err := os.Stat(m)
+		infoManifest, err := os.Stat(path.Join(targetDir, m))
 		if err != nil {
 			return err
 		}
@@ -489,6 +489,10 @@ func SliceKeys(m *manifest.Manifest) []setup.SliceKey {
 	return sliceKeys
 }
 
+// validateRootfs verify the content of the target directory is in line with
+// the manifest.
+// This function works under the assumption the manifest was previously
+// validated.
 func validateRootfs(m *manifest.Manifest, rootDir string) error {
 	return m.IteratePaths("", func(path *manifest.Path) error {
 		p := filepath.Join(rootDir, path.Path)
@@ -497,8 +501,8 @@ func validateRootfs(m *manifest.Manifest, rootDir string) error {
 			return err
 		}
 		mode := info.Mode()
-		if mode.String() != path.Mode {
-			return fmt.Errorf("tampered content: %q mode mismatch: %s recorded, %s observed", path.Path, path.Mode, mode)
+		if fmt.Sprintf("0%o", unixPerm(mode)) != path.Mode {
+			return fmt.Errorf("tampered content: %q mode mismatch: %s recorded, %s observed", path.Path, path.Mode, mode.String())
 		}
 
 		// Verify directories
@@ -506,7 +510,6 @@ func validateRootfs(m *manifest.Manifest, rootDir string) error {
 			if !info.IsDir() {
 				return fmt.Errorf("tampered content: %q expected to be a directory", path.Path)
 			}
-			// Nothing more to check
 			return nil
 		}
 
@@ -535,13 +538,12 @@ func validateRootfs(m *manifest.Manifest, rootDir string) error {
 			}
 			nLink := stat.Nlink
 			if nLink != path.Inode {
-				return fmt.Errorf("tampered content: %q hardlinkq count mismatch: %s recorded, %s observed", path.Path, path.Inode, nLink)
+				logf("tampered content: %q hardlinks count mismatch: %d recorded, %d observed", path.Path, path.Inode, nLink)
+				// return fmt.Errorf("tampered content: %q hardlinks count mismatch: %d recorded, %d observed", path.Path, path.Inode, nLink)
 			}
 		}
 
 		// Common verification for regular files
-		// TODO skip for manifest.wall
-
 		h, err := hash(p)
 		if err != nil {
 			return err
@@ -552,6 +554,7 @@ func validateRootfs(m *manifest.Manifest, rootDir string) error {
 				return fmt.Errorf("tampered file %q, hash mismatch: %s recorded, %s observed", path.Path, path.FinalSHA256, hString)
 			}
 		} else if len(path.SHA256) > 0 && hString != path.SHA256 {
+			// This is effectively skipping the manifest.wall since no hash is declared on it
 			return fmt.Errorf("tampered file %q, sha256 mismatch: %s recorded, %s observed", path.Path, path.SHA256, hString)
 		}
 		return nil

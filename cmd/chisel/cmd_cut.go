@@ -86,15 +86,15 @@ func (cmd *cmdCut) Execute(args []string) error {
 		if err != nil {
 			// TODO: When enabling the feature, error out.
 			logf("Warning: %v", err)
-		}
-
-		// Merge the slice keys used to build the existing rootfs with the ones
-		// explicitly requested slice.
-		// Previous slice keys contains both explicitly requested slices and slices
-		// resolved following essentials.
-		for _, s := range manifestutil.SliceKeys(manifest) {
-			if !slices.Contains(sliceKeys, s) {
-				sliceKeys = append(sliceKeys, s)
+		} else {
+			// Merge the slice keys used to build the existing rootfs with the ones
+			// explicitly requested slice.
+			// Previous slice keys contains both explicitly requested slices and slices
+			// resolved following essentials.
+			for _, s := range manifestutil.SliceKeys(manifest) {
+				if !slices.Contains(sliceKeys, s) {
+					sliceKeys = append(sliceKeys, s)
+				}
 			}
 		}
 	}
