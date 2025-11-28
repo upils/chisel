@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -387,10 +388,27 @@ func RootFSManifest(release *setup.Release, targetDir string) (*manifest.Manifes
 		return nil, err
 	}
 
-	err = validateRootfs(refManifest, targetDir)
+	rootfsReport, err := reportFromRootfs(targetDir)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("Report: %#v\n", rootfsReport)
+
+	manifestReport, err := reportFromManifest(refManifest)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("Report from manifest: %#v\n", manifestReport)
+
+	err = validateReportEntries(manifestReport, rootfsReport)
+	if err != nil {
+		return nil, err
+	}
+
+	// err = validateRootfs(refManifest, targetDir)
+	// if err != nil {
+	// 	return nil, err
+	// }
 	return refManifest, nil
 }
 
@@ -511,6 +529,7 @@ func validateRootfs(m *manifest.Manifest, rootDir string) error {
 		}
 
 		// Verify directories
+		// TODO check sha and final_sha and size
 		if strings.HasSuffix(path.Path, "/") {
 			if !info.IsDir() {
 				return fmt.Errorf("tampered content: %q expected to be a directory", path.Path)
@@ -591,4 +610,149 @@ func groupHardlinks(m *manifest.Manifest) (map[uint64][]*manifest.Path, error) {
 	}
 
 	return hardLinkGroups, nil
+}
+
+// reportFromRootfs builds a Report from root directory
+func reportFromRootfs(rootDir string) (*Report, error) {
+	report, err := NewReport(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("internal error: cannot create report: %w", err)
+	}
+
+	var inodes []uint64
+	pathsByInodes := make(map[uint64][]string)
+
+	dirfs := os.DirFS(report.Root)
+	err = fs.WalkDir(dirfs, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return fmt.Errorf("walk error: %w", err)
+		}
+		if path == "." {
+			return nil
+		}
+		fpath := filepath.Join(report.Root, path)
+		finfo, err := d.Info()
+		if err != nil {
+			return fmt.Errorf("cannot get stat info for %q: %w", fpath, err)
+		}
+
+		entry := ReportEntry{
+			Mode: finfo.Mode(),
+		}
+
+		var size int
+
+		ftype := finfo.Mode() & fs.ModeType
+		switch ftype {
+		case fs.ModeDir:
+			path = "/" + path + "/"
+		case fs.ModeSymlink:
+			lpath, err := os.Readlink(fpath)
+			if err != nil {
+				return err
+			}
+			path = "/" + path
+			entry.Link = lpath
+		case 0: // Regular
+			data, err := os.ReadFile(fpath)
+			if err != nil {
+				return fmt.Errorf("cannot read file: %w", err)
+			}
+			if len(data) >= 0 {
+				sum := sha256.Sum256(data)
+				entry.SHA256 = hex.EncodeToString(sum[:])
+			}
+			path = "/" + path
+			size = int(finfo.Size())
+		default:
+			return fmt.Errorf("unknown file type %d: %s", ftype, fpath)
+		}
+		entry.Path = path
+		entry.Size = size
+
+		if ftype != fs.ModeDir {
+			stat, ok := finfo.Sys().(*syscall.Stat_t)
+			if !ok {
+				return fmt.Errorf("cannot get syscall stat info for %q", fpath)
+			}
+			inode := stat.Ino
+			if len(pathsByInodes[inode]) == 1 {
+				inodes = append(inodes, inode)
+			}
+			entry.Inode = inode
+			pathsByInodes[inode] = append(pathsByInodes[inode], path)
+		}
+
+		report.Entries[path] = entry
+
+		return nil
+	})
+
+	return report, nil
+}
+
+// reportFromManifest builds a Report from a Manifest
+func reportFromManifest(m *manifest.Manifest) (*Report, error) {
+	report := &Report{
+		Entries: make(map[string]ReportEntry),
+	}
+
+	err := m.IteratePaths("", func(path *manifest.Path) error {
+		mode, err := strconv.ParseUint(path.Mode, 8, 32)
+		if err != nil {
+			return fmt.Errorf("cannot parse mode: %v", err)
+		}
+
+		entry := ReportEntry{
+			Path:        path.Path,
+			Mode:        fs.FileMode(mode),
+			Size:        int(path.Size),
+			FinalSHA256: path.FinalSHA256,
+			SHA256:      path.SHA256,
+			Inode:       path.Inode,
+			Link:        path.Link,
+		}
+		report.Entries[path.Path] = entry
+
+		return nil
+	})
+
+	return report, err
+}
+
+// validateReportEntries validates report entries of toValidate against
+// entries in the reference. The report under validation can contain more
+// entries.
+func validateReportEntries(reference, toValidate *Report) error {
+	for path, referenceEntry := range reference.Entries {
+		var errorMessage string
+		entryToValidate, ok := toValidate.Entries[path]
+		if !ok {
+			return fmt.Errorf("%q is missing", path)
+		}
+
+		if entryToValidate.Mode != referenceEntry.Mode {
+			errorMessage = fmt.Sprintf("invalid mode: expected %q, found %q", referenceEntry.Mode, entryToValidate.Mode)
+		}
+		if entryToValidate.Size != referenceEntry.Size {
+			errorMessage = fmt.Sprintf("invalid size: expected %d, found %d", referenceEntry.Size, entryToValidate.Size)
+		}
+		if len(referenceEntry.FinalSHA256) > 0 {
+			if entryToValidate.SHA256 != referenceEntry.FinalSHA256 {
+				errorMessage = fmt.Sprintf("invalid hash: expected %s, found %s", referenceEntry.FinalSHA256, entryToValidate.SHA256)
+			}
+		} else if len(referenceEntry.SHA256) > 0 && entryToValidate.SHA256 != referenceEntry.SHA256 {
+			errorMessage = fmt.Sprintf("invalid hash: expected %s, found %s", referenceEntry.SHA256, entryToValidate.SHA256)
+		}
+
+		if entryToValidate.Link != referenceEntry.Link {
+			errorMessage = fmt.Sprintf("invalid link: expected %q, found %q", referenceEntry.Link, entryToValidate.Link)
+		}
+
+		if len(errorMessage) > 0 {
+			return fmt.Errorf("invalid entry %q: %s", path, errorMessage)
+		}
+	}
+
+	return nil
 }
