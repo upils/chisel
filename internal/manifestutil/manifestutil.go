@@ -2,7 +2,6 @@ package manifestutil
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -12,7 +11,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/canonical/chisel/internal/apacheutil"
 	"github.com/canonical/chisel/internal/archive"
@@ -43,19 +41,21 @@ func FindPaths(slices []*setup.Slice) map[string][]*setup.Slice {
 // FindPathsInRelease finds all the paths marked with "generate:manifest"
 // for the given release.
 func FindPathsInRelease(r *setup.Release) []string {
-	manifests := []string{}
+	allSlices := []*setup.Slice{}
 	for _, pkg := range r.Packages {
 		for _, slice := range pkg.Slices {
-			for path, info := range slice.Contents {
-				if info.Generate == setup.GenerateManifest {
-					dir := strings.TrimSuffix(path, "**")
-					path = filepath.Join(dir, DefaultFilename)
-					manifests = append(manifests, path)
-				}
-			}
+			allSlices = append(allSlices, slice)
 		}
 	}
-	return manifests
+
+	manifestMap := FindPaths(allSlices)
+
+	paths := make([]string, 0, len(manifestMap))
+	for path := range manifestMap {
+		paths = append(paths, path)
+	}
+
+	return paths
 }
 
 type WriteOptions struct {
@@ -490,84 +490,4 @@ func SliceKeys(m *manifest.Manifest) []setup.SliceKey {
 	})
 
 	return sliceKeys
-}
-
-// reportFromRootfs builds a Report from root directory
-// Implementation heavily borrowed from testutil.TreeDump
-func reportFromRootfs(rootDir string) (*Report, error) {
-	report, err := NewReport(rootDir)
-	if err != nil {
-		return nil, fmt.Errorf("internal error: cannot create report: %w", err)
-	}
-
-	var inodes []uint64
-	pathsByInodes := make(map[uint64][]string)
-
-	dirfs := os.DirFS(report.Root)
-	err = fs.WalkDir(dirfs, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return fmt.Errorf("walk error: %w", err)
-		}
-		if path == "." {
-			return nil
-		}
-		fpath := filepath.Join(report.Root, path)
-		finfo, err := d.Info()
-		if err != nil {
-			return fmt.Errorf("cannot get stat info for %q: %w", fpath, err)
-		}
-
-		entry := ReportEntry{
-			Mode: finfo.Mode(),
-		}
-
-		var size int
-
-		ftype := finfo.Mode() & fs.ModeType
-		switch ftype {
-		case fs.ModeDir:
-			path = "/" + path + "/"
-		case fs.ModeSymlink:
-			lpath, err := os.Readlink(fpath)
-			if err != nil {
-				return err
-			}
-			path = "/" + path
-			entry.Link = lpath
-		case 0: // Regular
-			data, err := os.ReadFile(fpath)
-			if err != nil {
-				return fmt.Errorf("cannot read file: %w", err)
-			}
-			if len(data) >= 0 {
-				sum := sha256.Sum256(data)
-				entry.SHA256 = hex.EncodeToString(sum[:])
-			}
-			path = "/" + path
-			size = int(finfo.Size())
-		default:
-			return fmt.Errorf("unknown file type %d: %s", ftype, fpath)
-		}
-		entry.Path = path
-		entry.Size = size
-
-		if ftype != fs.ModeDir {
-			stat, ok := finfo.Sys().(*syscall.Stat_t)
-			if !ok {
-				return fmt.Errorf("cannot get syscall stat info for %q", fpath)
-			}
-			inode := stat.Ino
-			if len(pathsByInodes[inode]) == 1 {
-				inodes = append(inodes, inode)
-			}
-			entry.Inode = inode
-			pathsByInodes[inode] = append(pathsByInodes[inode], path)
-		}
-
-		report.Entries[path] = entry
-
-		return nil
-	})
-
-	return report, nil
 }

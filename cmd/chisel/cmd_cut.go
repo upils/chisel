@@ -89,7 +89,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 		} else {
 			// Merge the slice keys used to build the existing rootfs with the ones
 			// explicitly requested slices.
-			// Previous slice keys contains both explicitly requested slices and slices
+			// Previous slice keys contain both explicitly requested slices and slices
 			// resolved following essentials.
 			for _, s := range manifestutil.SliceKeys(manifest) {
 				if !slices.Contains(sliceKeys, s) {
