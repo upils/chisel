@@ -376,13 +376,14 @@ func RootFSManifest(release *setup.Release, targetDir string) (*manifest.Manifes
 
 	// Select the first manifest of the list as the reference one for now.
 	// Another heuristic could be used (ex. select the one from base-files_chisel).
-	refManifestPath := path.Join(targetDir, manifestPaths[0])
+	refManifestRelPath := manifestPaths[0]
+	refManifestPath := path.Join(targetDir, refManifestRelPath)
 	refManifest, err := load(refManifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", refManifestPath, err)
+		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", refManifestRelPath, err)
 	}
 
-	err = checkConsistency(refManifestPath, targetDir, manifestPaths[1:])
+	err = checkConsistency(refManifestRelPath, targetDir, manifestPaths[1:])
 	if err != nil {
 		return nil, err
 	}
@@ -423,7 +424,8 @@ func load(manifestPath string) (*manifest.Manifest, error) {
 
 // checkConsistency checks consistency between a list of manifests and a
 // reference one.
-func checkConsistency(reference string, targetDir string, manifests []string) error {
+func checkConsistency(referenceRelPath string, targetDir string, manifests []string) error {
+	reference := path.Join(targetDir, referenceRelPath)
 	hashReference, err := hash(reference)
 	if err != nil {
 		return err
@@ -436,23 +438,24 @@ func checkConsistency(reference string, targetDir string, manifests []string) er
 
 	modeRef := infoRef.Mode()
 
-	for _, m := range manifests {
-		infoManifest, err := os.Stat(path.Join(targetDir, m))
+	for _, manifestRelPath := range manifests {
+		manifestPath := path.Join(targetDir, manifestRelPath)
+		infoManifest, err := os.Stat(manifestPath)
 		if err != nil {
 			return err
 		}
 
 		modeManifest := infoManifest.Mode()
 		if modeManifest != modeRef {
-			return fmt.Errorf("invalid manifest: permissions on %s (%s) are different from the reference manifest %s (%s)", m, modeManifest, reference, modeRef)
+			return fmt.Errorf("invalid manifest: permissions on %s (%s) are different from the reference manifest %s (%s)", manifestRelPath, modeManifest, referenceRelPath, modeRef)
 		}
 
-		hashM, err := hash(m)
+		hashM, err := hash(manifestPath)
 		if err != nil {
 			return err
 		}
 		if !slices.Equal(hashM, hashReference) {
-			return fmt.Errorf("invalid manifest: %s is inconsistent with %s", m, reference)
+			return fmt.Errorf("invalid manifest: %s is inconsistent with %s", manifestRelPath, referenceRelPath)
 		}
 	}
 

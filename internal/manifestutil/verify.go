@@ -136,7 +136,7 @@ func verifyPath(info os.FileInfo, fpath string, path *manifest.Path) error {
 
 	// Verify size
 	if info.Size() != int64(path.Size) {
-		return fmt.Errorf("tampered file: %q, size mimsmatch: %d recorded, %d observed", path.Path, info.Size(), int64(path.Size))
+		return fmt.Errorf("tampered file: %q, size mismatch: %d recorded, %d observed", path.Path, info.Size(), int64(path.Size))
 	}
 
 	// Verify hash

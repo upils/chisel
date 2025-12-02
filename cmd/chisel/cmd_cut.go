@@ -88,7 +88,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 			logf("Warning: %v", err)
 		} else {
 			// Merge the slice keys used to build the existing rootfs with the ones
-			// explicitly requested slice.
+			// explicitly requested slices.
 			// Previous slice keys contains both explicitly requested slices and slices
 			// resolved following essentials.
 			for _, s := range manifestutil.SliceKeys(manifest) {
