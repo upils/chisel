@@ -12,19 +12,18 @@ import (
 	"github.com/canonical/chisel/public/manifest"
 )
 
-// validateRootfs verify the content of the target directory is in line with
+// VerifyDir verifies the content of the target directory matches with
 // the manifest.
-// This function works under the assumption the manifest was previously
-// validated.
-// Files not managed by chisel are not checked.
-func validateRootfs(m *manifest.Manifest, rootDir string) error {
-	pathGroups, err := groupManifestPaths(m)
+// This function works under the assumption the manifest is valid.
+// Files not managed by chisel are ignored.
+func VerifyDir(mfest *manifest.Manifest, rootDir string) error {
+	pathGroups, err := groupPaths(mfest)
 	if err != nil {
 		return err
 	}
 
 	for _, group := range pathGroups {
-		err := verifyGroup(rootDir, group)
+		err := verifyGroup(group, rootDir)
 		if err != nil {
 			return err
 		}
@@ -34,25 +33,25 @@ func validateRootfs(m *manifest.Manifest, rootDir string) error {
 }
 
 type pathGroup struct {
-	headEntry *manifest.Path
-	paths     []string
+	head  *manifest.Path
+	paths []string
 }
 
-// groupManifestPaths groups paths by inode.
+// groupPaths groups paths by inode.
 // Returns a slice of path groups where each group represents either:
 // - A standalone file (inode 0)
 // - A set of hardlinked files (same non-zero inode)
-func groupManifestPaths(m *manifest.Manifest) ([]*pathGroup, error) {
+func groupPaths(mfest *manifest.Manifest) ([]*pathGroup, error) {
 	pathGroups := []*pathGroup{}
 	inodeToGroup := make(map[uint64]*pathGroup)
 
-	err := m.IteratePaths("", func(path *manifest.Path) error {
+	err := mfest.IteratePaths("", func(path *manifest.Path) error {
 		inode := path.Inode
 		if inode == 0 {
 			// Standalone path
 			pathGroups = append(pathGroups, &pathGroup{
-				headEntry: path,
-				paths:     []string{path.Path},
+				head:  path,
+				paths: []string{path.Path},
 			})
 			return nil
 		}
@@ -62,8 +61,8 @@ func groupManifestPaths(m *manifest.Manifest) ([]*pathGroup, error) {
 		if !ok {
 			// New group of hardlinks
 			group = &pathGroup{
-				headEntry: path,
-				paths:     []string{path.Path},
+				head:  path,
+				paths: []string{path.Path},
 			}
 			inodeToGroup[inode] = group
 			pathGroups = append(pathGroups, group)
@@ -90,8 +89,8 @@ func groupManifestPaths(m *manifest.Manifest) ([]*pathGroup, error) {
 }
 
 // verifyGroup verifies a group of paths
-func verifyGroup(rootDir string, group *pathGroup) error {
-	path := group.headEntry
+func verifyGroup(group *pathGroup, rootDir string) error {
+	path := group.head
 
 	fpath := filepath.Join(rootDir, path.Path)
 	info, err := os.Lstat(fpath)
@@ -99,7 +98,7 @@ func verifyGroup(rootDir string, group *pathGroup) error {
 		return err
 	}
 
-	if err := verifyPath(info, fpath, path); err != nil {
+	if err := verifyPath(path, info, fpath); err != nil {
 		return err
 	}
 
@@ -107,14 +106,14 @@ func verifyGroup(rootDir string, group *pathGroup) error {
 }
 
 // verifyPath verifies a single path against its manifest entry
-func verifyPath(info os.FileInfo, fpath string, path *manifest.Path) error {
+func verifyPath(path *manifest.Path, info os.FileInfo, fpath string) error {
 	mode := info.Mode()
 
-	if err := verifyFileType(info, path); err != nil {
+	if err := verifyFileType(path, info); err != nil {
 		return err
 	}
 
-	if err := verifyMode(mode, path); err != nil {
+	if err := verifyMode(path, mode); err != nil {
 		return err
 	}
 
@@ -124,24 +123,24 @@ func verifyPath(info os.FileInfo, fpath string, path *manifest.Path) error {
 	}
 
 	if len(path.Link) > 0 {
-		return verifySymlink(fpath, path)
+		return verifySymlink(path, fpath)
 	}
 
 	if !mode.IsRegular() {
 		return fmt.Errorf("tampered content: %q has unrecognized type %s.", path.Path, mode.String())
 	}
 
-	if err := verifySize(info, path); err != nil {
+	if err := verifySize(path, info); err != nil {
 		return err
 	}
 
 	// Verify hash
 	// Most expensive operation, so do it at the end.
-	return verifyHash(fpath, path)
+	return verifyHash(path, fpath)
 }
 
 // verifyFileType checks that the file type matches expectations.
-func verifyFileType(info os.FileInfo, path *manifest.Path) error {
+func verifyFileType(path *manifest.Path, info os.FileInfo) error {
 	mode := info.Mode()
 	isDir := strings.HasSuffix(path.Path, "/")
 	isSymlink := path.Link != ""
@@ -170,11 +169,7 @@ func verifyFileType(info os.FileInfo, path *manifest.Path) error {
 }
 
 // verifyMode checks file permissions match the manifest.
-func verifyMode(mode os.FileMode, path *manifest.Path) error {
-	if path.Mode == "" {
-		return fmt.Errorf("internal error: missing mode for path %q", path.Path)
-	}
-
+func verifyMode(path *manifest.Path, mode os.FileMode) error {
 	expectedMode := path.Mode
 	actualMode := fmt.Sprintf("0%o", unixPerm(mode))
 
@@ -187,11 +182,7 @@ func verifyMode(mode os.FileMode, path *manifest.Path) error {
 }
 
 // verifySymlink checks symlink target matches the manifest.
-func verifySymlink(fpath string, path *manifest.Path) error {
-	if path.Link == "" {
-		return fmt.Errorf("internal error: path %q marked as symlink but no target specified", path.Path)
-	}
-
+func verifySymlink(path *manifest.Path, fpath string) error {
 	link, err := os.Readlink(fpath)
 	if err != nil {
 		return fmt.Errorf("cannot read symlink %q: %w", path.Path, err)
@@ -206,7 +197,7 @@ func verifySymlink(fpath string, path *manifest.Path) error {
 }
 
 // verifySize checks file size matches the manifest.
-func verifySize(info os.FileInfo, path *manifest.Path) error {
+func verifySize(path *manifest.Path, info os.FileInfo) error {
 	expected := int64(path.Size)
 	actual := info.Size()
 
@@ -219,9 +210,9 @@ func verifySize(info os.FileInfo, path *manifest.Path) error {
 }
 
 // verifyHash verifies file content hash.
-// Uses FinalSHA256 if present (post-mutation hash), otherwise SHA256 (original file hash).
+// Uses FinalSHA256 if present, otherwise SHA256.
 // Files without any hash declaration are skipped (e.g., manifest.wall).
-func verifyHash(fpath string, path *manifest.Path) error {
+func verifyHash(path *manifest.Path, fpath string) error {
 	expectedHash := path.FinalSHA256
 	hashType := "final"
 
@@ -237,14 +228,9 @@ func verifyHash(fpath string, path *manifest.Path) error {
 		return nil
 	}
 
-	if len(expectedHash) != 64 {
-		return fmt.Errorf("internal error: invalid SHA256 hash length for %q: %d",
-			path.Path, len(expectedHash))
-	}
-
 	h, err := hash(fpath)
 	if err != nil {
-		return fmt.Errorf("cannot compute hash for %q: %w", path.Path, err)
+		return fmt.Errorf("internal error: cannot compute hash for %q: %w", path.Path, err)
 	}
 
 	actualHash := hex.EncodeToString(h)
@@ -295,7 +281,7 @@ func verifyHardlinks(headInfo os.FileInfo, headPath string, rootDir string, path
 func getPhysicalInode(info os.FileInfo) (uint64, error) {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return 0, fmt.Errorf("cannot get syscall stat info for %q", info.Name())
+		return 0, fmt.Errorf("internal error: cannot get syscall stat info for %q", info.Name())
 	}
 	return stat.Ino, nil
 }

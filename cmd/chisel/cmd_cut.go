@@ -76,17 +76,22 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	rootfsPath, err := preExistingRootfs(cmd.RootDir)
+	targetDir, err := nonEmptyDir(cmd.RootDir)
 	if err != nil {
 		return err
 	}
 
-	if len(rootfsPath) > 0 {
-		manifest, err := manifestutil.RootFSManifest(release, rootfsPath)
+	if len(targetDir) > 0 {
+		manifest, err := manifestutil.FromDir(release, targetDir)
 		if err != nil {
 			// TODO: When enabling the feature, error out.
 			logf("Warning: %v", err)
 		} else {
+			err = manifestutil.VerifyDir(manifest, targetDir)
+			if err != nil {
+				// TODO: When enabling the feature, error out.
+				logf("Warning: %v", err)
+			}
 			// Merge the slice keys used to build the existing rootfs with the ones
 			// explicitly requested slices.
 			// Previous slice keys contain both explicitly requested slices and slices
@@ -155,8 +160,8 @@ func (cmd *cmdCut) Execute(args []string) error {
 	return err
 }
 
-// preExistingRootfs determines if the target directory was produced by chisel.
-func preExistingRootfs(rootdir string) (string, error) {
+// nonEmptyDir checks whether the given directory exists and is non-empty.
+func nonEmptyDir(rootdir string) (string, error) {
 	// Get targetDir path
 	// Note: This is already done in `slicer.Run`. Extract it and avoid doing it twice?
 	targetDir := filepath.Clean(rootdir)

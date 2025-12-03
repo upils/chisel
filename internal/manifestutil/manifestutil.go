@@ -365,34 +365,30 @@ func Validate(mfest *manifest.Manifest) (err error) {
 	return nil
 }
 
-// RootFSManifest extracts the manifest from a targetDir
-func RootFSManifest(release *setup.Release, targetDir string) (*manifest.Manifest, error) {
+// FromDir extracts, validates and returns the manifest from a targetDir
+func FromDir(release *setup.Release, targetDir string) (*manifest.Manifest, error) {
 	manifestPaths := FindPathsInRelease(release)
 	if len(manifestPaths) == 0 {
 		// No manifest in the release means it cannot produce a rootfs that can
 		// be recut. Treat this case as cutting a new rootfs.
-		return nil, nil
+		return nil, fmt.Errorf("no manifest generated for this release")
 	}
 
 	// Select the first manifest of the list as the reference one for now.
 	// Another heuristic could be used (ex. select the one from base-files_chisel).
-	refManifestRelPath := manifestPaths[0]
-	refManifestPath := path.Join(targetDir, refManifestRelPath)
-	refManifest, err := load(refManifestPath)
+	referenceRelPath := manifestPaths[0]
+	referencePath := path.Join(targetDir, referenceRelPath)
+	reference, err := load(referencePath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", refManifestRelPath, err)
+		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", referenceRelPath, err)
 	}
 
-	err = checkConsistency(refManifestRelPath, targetDir, manifestPaths[1:])
+	err = checkConsistency(referenceRelPath, targetDir, manifestPaths[1:])
 	if err != nil {
 		return nil, err
 	}
 
-	err = validateRootfs(refManifest, targetDir)
-	if err != nil {
-		return nil, err
-	}
-	return refManifest, nil
+	return reference, nil
 }
 
 // load reads, validates and returns a manifest.
@@ -428,12 +424,12 @@ func checkConsistency(referenceRelPath string, targetDir string, manifests []str
 	reference := path.Join(targetDir, referenceRelPath)
 	hashReference, err := hash(reference)
 	if err != nil {
-		return err
+		return fmt.Errorf("internal error: cannot compute hash for %q: %w", referenceRelPath, err)
 	}
 
 	infoRef, err := os.Stat(reference)
 	if err != nil {
-		return err
+		return fmt.Errorf("internal error: cannot get file info for %q: %w", referenceRelPath, err)
 	}
 
 	modeRef := infoRef.Mode()
@@ -442,7 +438,7 @@ func checkConsistency(referenceRelPath string, targetDir string, manifests []str
 		manifestPath := path.Join(targetDir, manifestRelPath)
 		infoManifest, err := os.Stat(manifestPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("internal error: cannot get file info for %q: %w", manifestRelPath, err)
 		}
 
 		modeManifest := infoManifest.Mode()
@@ -452,7 +448,7 @@ func checkConsistency(referenceRelPath string, targetDir string, manifests []str
 
 		hashM, err := hash(manifestPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("internal error: cannot compute hash for %q: %w", manifestRelPath, err)
 		}
 		if !slices.Equal(hashM, hashReference) {
 			return fmt.Errorf("invalid manifest: %s is inconsistent with %s", manifestRelPath, referenceRelPath)
@@ -478,9 +474,9 @@ func hash(path string) ([]byte, error) {
 }
 
 // SliceKeys returns setup.SliceKeys from a manifest.
-func SliceKeys(m *manifest.Manifest) []setup.SliceKey {
+func SliceKeys(mfest *manifest.Manifest) []setup.SliceKey {
 	sliceKeys := []setup.SliceKey{}
-	m.IterateSlices("", func(slice *manifest.Slice) error {
+	mfest.IterateSlices("", func(slice *manifest.Slice) error {
 		sk, err := apacheutil.ParseSliceKey(slice.Name)
 		if err != nil {
 			return err
