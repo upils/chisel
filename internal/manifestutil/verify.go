@@ -23,7 +23,7 @@ func VerifyDir(mfest *manifest.Manifest, rootDir string) error {
 	}
 
 	for _, group := range pathGroups {
-		err := verifyGroup(group, rootDir)
+		err = verifyGroup(group, rootDir)
 		if err != nil {
 			return err
 		}
@@ -67,10 +67,9 @@ func groupPaths(mfest *manifest.Manifest) ([]*pathGroup, error) {
 			inodeToGroup[inode] = group
 			pathGroups = append(pathGroups, group)
 			return nil
-		} else {
-			// Add path to the existing group
-			group.paths = append(group.paths, path.Path)
 		}
+		// Add path to the existing group
+		group.paths = append(group.paths, path.Path)
 
 		return nil
 	})
@@ -78,7 +77,7 @@ func groupPaths(mfest *manifest.Manifest) ([]*pathGroup, error) {
 		return nil, err
 	}
 
-	// sort paths
+	// Sort paths in groups for deterministic behavior
 	for _, group := range pathGroups {
 		if len(group.paths) > 1 {
 			slices.Sort(group.paths)
@@ -91,7 +90,6 @@ func groupPaths(mfest *manifest.Manifest) ([]*pathGroup, error) {
 // verifyGroup verifies a group of paths
 func verifyGroup(group *pathGroup, rootDir string) error {
 	path := group.head
-
 	fpath := filepath.Join(rootDir, path.Path)
 	info, err := os.Lstat(fpath)
 	if err != nil {
@@ -117,7 +115,7 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fpath string) error {
 		return err
 	}
 
-	if strings.HasSuffix(path.Path, "/") {
+	if pathIsDir(path.Path) {
 		// Directories have no additional checks
 		return nil
 	}
@@ -127,7 +125,7 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fpath string) error {
 	}
 
 	if !mode.IsRegular() {
-		return fmt.Errorf("tampered content: %q has unrecognized type %s.", path.Path, mode.String())
+		return fmt.Errorf("tampered content: %q has unrecognized type %s", path.Path, mode.String())
 	}
 
 	if err := verifySize(path, info); err != nil {
@@ -142,7 +140,7 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fpath string) error {
 // verifyFileType checks that the file type matches expectations.
 func verifyFileType(path *manifest.Path, info os.FileInfo) error {
 	mode := info.Mode()
-	isDir := strings.HasSuffix(path.Path, "/")
+	isDir := pathIsDir(path.Path)
 	isSymlink := path.Link != ""
 
 	if isDir && !info.IsDir() {
@@ -284,4 +282,8 @@ func getPhysicalInode(info os.FileInfo) (uint64, error) {
 		return 0, fmt.Errorf("internal error: cannot get syscall stat info for %q", info.Name())
 	}
 	return stat.Ino, nil
+}
+
+func pathIsDir(path string) bool {
+	return strings.HasSuffix(path, "/")
 }
