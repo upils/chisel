@@ -2,6 +2,7 @@ package manifestutil
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,14 +24,15 @@ func validateRootfs(m *manifest.Manifest, rootDir string) error {
 		return err
 	}
 
+	var allErrors []error
 	for _, group := range pathGroups {
 		err := verifyGroup(rootDir, group)
 		if err != nil {
-			return err
+			allErrors = append(allErrors, err)
 		}
 	}
 
-	return nil
+	return errors.Join(allErrors...)
 }
 
 type pathGroup struct {
@@ -99,11 +101,16 @@ func verifyGroup(rootDir string, group *pathGroup) error {
 		return err
 	}
 
+	var allErrors []error
 	if err := verifyPath(info, fpath, path); err != nil {
-		return err
+		allErrors = append(allErrors, err)
 	}
 
-	return verifyHardlinks(info, path.Path, rootDir, group.paths)
+	if err := verifyHardlinks(info, path.Path, rootDir, group.paths); err != nil {
+		allErrors = append(allErrors, err)
+	}
+
+	return errors.Join(allErrors...)
 }
 
 // verifyPath verifies a single path against its manifest entry
