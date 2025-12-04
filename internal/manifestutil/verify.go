@@ -183,7 +183,7 @@ func verifyMode(path *manifest.Path, mode os.FileMode) error {
 func verifySymlink(path *manifest.Path, fpath string) error {
 	link, err := os.Readlink(fpath)
 	if err != nil {
-		return fmt.Errorf("cannot read symlink %q: %w", path.Path, err)
+		return fmt.Errorf("internal error: cannot read symlink %q: %w", path.Path, err)
 	}
 
 	if link != path.Link {
@@ -267,7 +267,7 @@ func verifyHardlinks(headInfo os.FileInfo, headPath string, rootDir string, path
 			return err
 		}
 
-		// Verify Inode Equality
+		// Verify Inode Equality.
 		if sibInode != headInode {
 			return fmt.Errorf("tampered content: broken hardlink: %s and %s should share inode but do not", headPath, siblingPath)
 		}
