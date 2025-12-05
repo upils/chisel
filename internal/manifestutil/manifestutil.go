@@ -477,7 +477,7 @@ func hash(path string) ([]byte, error) {
 func SliceKeys(mfest *manifest.Manifest) []setup.SliceKey {
 	sliceKeys := []setup.SliceKey{}
 	mfest.IterateSlices("", func(slice *manifest.Slice) error {
-		sk, err := apacheutil.ParseSliceKey(slice.Name)
+		sk, err := setup.ParseSliceKey(slice.Name)
 		if err != nil {
 			return err
 		}

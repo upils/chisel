@@ -128,13 +128,22 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fpath string) error {
 		return fmt.Errorf("tampered content: %q has unrecognized type %s", path.Path, mode.String())
 	}
 
+	expectedHash := recordedHash(path)
+	// Skip hash and size verification if no hash is declared.
+	// The manifest validation ensures only manifests can have
+	// no hash.
+	if expectedHash == "" {
+		// No hash to verify, skip size and hash checks
+		return nil
+	}
+
 	if err := verifySize(path, info); err != nil {
 		return err
 	}
 
 	// Verify hash
 	// Most expensive operation, so do it at the end.
-	return verifyHash(path, fpath)
+	return verifyHash(path, expectedHash, fpath)
 }
 
 // verifyFileType checks that the file type matches expectations.
@@ -194,6 +203,16 @@ func verifySymlink(path *manifest.Path, fpath string) error {
 	return nil
 }
 
+// recordedHash returns FinalSHA256 if present, otherwise SHA256.
+func recordedHash(path *manifest.Path) string {
+	expectedHash := path.FinalSHA256
+
+	if expectedHash == "" {
+		expectedHash = path.SHA256
+	}
+	return expectedHash
+}
+
 // verifySize checks file size matches the manifest.
 func verifySize(path *manifest.Path, info os.FileInfo) error {
 	expected := int64(path.Size)
@@ -208,24 +227,7 @@ func verifySize(path *manifest.Path, info os.FileInfo) error {
 }
 
 // verifyHash verifies file content hash.
-// Uses FinalSHA256 if present, otherwise SHA256.
-// Files without any hash declaration are skipped (e.g., manifest.wall).
-func verifyHash(path *manifest.Path, fpath string) error {
-	expectedHash := path.FinalSHA256
-	hashType := "final"
-
-	if expectedHash == "" {
-		expectedHash = path.SHA256
-		hashType = "original"
-	}
-
-	// Skip hash verification if no hash is declared
-	if expectedHash == "" {
-		// This is skipping manifest.wall that is generated
-		// during the cut operation and have no predetermined hash
-		return nil
-	}
-
+func verifyHash(path *manifest.Path, expectedHash string, fpath string) error {
 	h, err := hash(fpath)
 	if err != nil {
 		return fmt.Errorf("internal error: cannot compute hash for %q: %w", path.Path, err)
@@ -233,8 +235,8 @@ func verifyHash(path *manifest.Path, fpath string) error {
 
 	actualHash := hex.EncodeToString(h)
 	if actualHash != expectedHash {
-		return fmt.Errorf("tampered file: %q %s hash mismatch: expected %s, observed %s",
-			path.Path, hashType, expectedHash, actualHash)
+		return fmt.Errorf("tampered file: %q hash mismatch: expected %s, observed %s",
+			path.Path, expectedHash, actualHash)
 	}
 
 	return nil
