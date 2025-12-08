@@ -76,12 +76,23 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	targetDir, err := nonEmptyDir(cmd.RootDir)
+	// Get targetDir path
+	// Note: This is already done in `slicer.Run`. Extract it and avoid doing it twice?
+	targetDir := filepath.Clean(cmd.RootDir)
+	if !filepath.IsAbs(targetDir) {
+		dir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("cannot obtain current directory: %w", err)
+		}
+		targetDir = filepath.Join(dir, targetDir)
+	}
+
+	empty, err := emptyDir(targetDir)
 	if err != nil {
 		return err
 	}
 
-	if len(targetDir) > 0 {
+	if !empty {
 		manifest, err := manifestutil.FromDir(release, targetDir)
 		if err != nil {
 			// TODO: When enabling the feature, error out.
@@ -160,27 +171,12 @@ func (cmd *cmdCut) Execute(args []string) error {
 	return err
 }
 
-// nonEmptyDir checks whether the given directory exists and is non-empty.
-func nonEmptyDir(rootdir string) (string, error) {
-	// Get targetDir path
-	// Note: This is already done in `slicer.Run`. Extract it and avoid doing it twice?
-	targetDir := filepath.Clean(rootdir)
-	if !filepath.IsAbs(targetDir) {
-		dir, err := os.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("cannot obtain current directory: %w", err)
-		}
-		targetDir = filepath.Join(dir, targetDir)
-	}
-
+// emptyDir checks whether the given directory is empty.
+func emptyDir(targetDir string) (bool, error) {
 	entries, err := os.ReadDir(targetDir)
 	if err != nil {
-		return "", fmt.Errorf("cannot read root directory %q: %v", targetDir, err)
+		return false, fmt.Errorf("cannot read root directory %q: %v", targetDir, err)
 	}
 
-	if len(entries) == 0 {
-		return "", nil
-	}
-
-	return targetDir, nil
+	return len(entries) == 0, nil
 }

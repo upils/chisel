@@ -377,8 +377,8 @@ func FromDir(release *setup.Release, targetDir string) (*manifest.Manifest, erro
 	// Select the first manifest of the list as the reference one for now.
 	// Another heuristic could be used (ex. select the one from base-files_chisel).
 	referenceRelPath := manifestPaths[0]
-	referencePath := path.Join(targetDir, referenceRelPath)
-	reference, err := load(referencePath)
+	referenceAbsPath := path.Join(targetDir, referenceRelPath)
+	reference, err := load(referenceAbsPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", referenceRelPath, err)
 	}
@@ -420,45 +420,45 @@ func load(manifestPath string) (*manifest.Manifest, error) {
 
 // checkConsistency checks consistency between a list of manifests and a
 // reference one.
-func checkConsistency(referenceRelPath string, targetDir string, manifests []string) error {
-	reference := path.Join(targetDir, referenceRelPath)
-	hashReference, err := hash(reference)
+func checkConsistency(refRelPath string, targetDir string, manifestPaths []string) error {
+	ref := path.Join(targetDir, refRelPath)
+	refHash, err := contentHash(ref)
 	if err != nil {
-		return fmt.Errorf("internal error: cannot compute hash for %q: %w", referenceRelPath, err)
+		return fmt.Errorf("internal error: cannot compute hash for %q: %w", refRelPath, err)
 	}
 
-	infoRef, err := os.Stat(reference)
+	refInfo, err := os.Stat(ref)
 	if err != nil {
-		return fmt.Errorf("internal error: cannot get file info for %q: %w", referenceRelPath, err)
+		return fmt.Errorf("internal error: cannot get file info for %q: %w", refRelPath, err)
 	}
 
-	modeRef := infoRef.Mode()
+	refMode := refInfo.Mode()
 
-	for _, manifestRelPath := range manifests {
+	for _, manifestRelPath := range manifestPaths {
 		manifestPath := path.Join(targetDir, manifestRelPath)
-		infoManifest, err := os.Stat(manifestPath)
+		manifestInfo, err := os.Stat(manifestPath)
 		if err != nil {
 			return fmt.Errorf("internal error: cannot get file info for %q: %w", manifestRelPath, err)
 		}
 
-		modeManifest := infoManifest.Mode()
-		if modeManifest != modeRef {
-			return fmt.Errorf("invalid manifest: permissions on %s (%s) are different from the reference manifest %s (%s)", manifestRelPath, modeManifest, referenceRelPath, modeRef)
+		manifestMode := manifestInfo.Mode()
+		if manifestMode != refMode {
+			return fmt.Errorf("invalid manifest: permissions on %s (%s) are different from the reference manifest %s (%s)", manifestRelPath, manifestMode, refRelPath, refMode)
 		}
 
-		hashM, err := hash(manifestPath)
+		manifestHash, err := contentHash(manifestPath)
 		if err != nil {
 			return fmt.Errorf("internal error: cannot compute hash for %q: %w", manifestRelPath, err)
 		}
-		if !slices.Equal(hashM, hashReference) {
-			return fmt.Errorf("invalid manifest: %s is inconsistent with %s", manifestRelPath, referenceRelPath)
+		if !slices.Equal(manifestHash, refHash) {
+			return fmt.Errorf("invalid manifest: %s is inconsistent with %s", manifestRelPath, refRelPath)
 		}
 	}
 
 	return nil
 }
 
-func hash(path string) ([]byte, error) {
+func contentHash(path string) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err

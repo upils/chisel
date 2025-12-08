@@ -125,7 +125,7 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fpath string) error {
 	}
 
 	if !mode.IsRegular() {
-		return fmt.Errorf("tampered content: %q has unrecognized type %s", path.Path, mode.String())
+		return fmt.Errorf("inconsistent content: %q has unrecognized type %s", path.Path, mode.String())
 	}
 
 	expectedHash := recordedHash(path)
@@ -153,22 +153,22 @@ func verifyFileType(path *manifest.Path, info os.FileInfo) error {
 	isSymlink := path.Link != ""
 
 	if isDir && !info.IsDir() {
-		return fmt.Errorf("tampered content: %q expected to be a directory but found %s",
+		return fmt.Errorf("inconsistent content: %q expected to be a directory but found %s",
 			path.Path, mode.Type().String())
 	}
 
 	if !isDir && info.IsDir() {
-		return fmt.Errorf("tampered content: %q is a directory but manifest expects a file",
+		return fmt.Errorf("inconsistent content: %q is a directory but manifest expects a file",
 			path.Path)
 	}
 
 	if isSymlink && mode.Type() != os.ModeSymlink {
-		return fmt.Errorf("tampered content: %q expected to be a symlink but found %s",
+		return fmt.Errorf("inconsistent content: %q expected to be a symlink but found %s",
 			path.Path, mode.Type().String())
 	}
 
 	if !isSymlink && mode.Type() == os.ModeSymlink {
-		return fmt.Errorf("tampered content: %q is a symlink but manifest expects regular file",
+		return fmt.Errorf("inconsistent content: %q is a symlink but manifest expects regular file",
 			path.Path)
 	}
 
@@ -179,9 +179,8 @@ func verifyFileType(path *manifest.Path, info os.FileInfo) error {
 func verifyMode(path *manifest.Path, mode os.FileMode) error {
 	expectedMode := path.Mode
 	actualMode := fmt.Sprintf("0%o", unixPerm(mode))
-
 	if actualMode != expectedMode {
-		return fmt.Errorf("tampered content: %q mode mismatch: expected %s, observed %s",
+		return fmt.Errorf("inconsistent content: %q mode mismatch: expected %s, observed %s",
 			path.Path, expectedMode, actualMode)
 	}
 
@@ -196,17 +195,16 @@ func verifySymlink(path *manifest.Path, fpath string) error {
 	}
 
 	if link != path.Link {
-		return fmt.Errorf("tampered content: %q symlink mismatch: expected %q → %q, observed %q → %q",
+		return fmt.Errorf("inconsistent content: %q symlink mismatch: expected %q → %q, observed %q → %q",
 			path.Path, path.Path, path.Link, path.Path, link)
 	}
 
 	return nil
 }
 
-// recordedHash returns FinalSHA256 if present, otherwise SHA256.
+// recordedHash returns path.FinalSHA256 if present, otherwise path.SHA256.
 func recordedHash(path *manifest.Path) string {
 	expectedHash := path.FinalSHA256
-
 	if expectedHash == "" {
 		expectedHash = path.SHA256
 	}
@@ -217,9 +215,8 @@ func recordedHash(path *manifest.Path) string {
 func verifySize(path *manifest.Path, info os.FileInfo) error {
 	expected := int64(path.Size)
 	actual := info.Size()
-
 	if actual != expected {
-		return fmt.Errorf("tampered file: %q size mismatch: expected %d bytes, observed %d bytes",
+		return fmt.Errorf("inconsistent file: %q size mismatch: expected %d bytes, observed %d bytes",
 			path.Path, expected, actual)
 	}
 
@@ -228,14 +225,14 @@ func verifySize(path *manifest.Path, info os.FileInfo) error {
 
 // verifyHash verifies file content hash.
 func verifyHash(path *manifest.Path, expectedHash string, fpath string) error {
-	h, err := hash(fpath)
+	h, err := contentHash(fpath)
 	if err != nil {
 		return fmt.Errorf("internal error: cannot compute hash for %q: %w", path.Path, err)
 	}
 
 	actualHash := hex.EncodeToString(h)
 	if actualHash != expectedHash {
-		return fmt.Errorf("tampered file: %q hash mismatch: expected %s, observed %s",
+		return fmt.Errorf("inconsistent file: %q hash mismatch: expected %s, observed %s",
 			path.Path, expectedHash, actualHash)
 	}
 
@@ -271,7 +268,7 @@ func verifyHardlinks(headInfo os.FileInfo, headPath string, rootDir string, path
 
 		// Verify Inode Equality.
 		if sibInode != headInode {
-			return fmt.Errorf("tampered content: broken hardlink: %s and %s should share inode but do not", headPath, siblingPath)
+			return fmt.Errorf("inconsistent content: broken hardlink: %s and %s expected to share the same inode", headPath, siblingPath)
 		}
 	}
 	return nil
