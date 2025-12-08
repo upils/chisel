@@ -89,18 +89,18 @@ func groupPaths(mfest *manifest.Manifest) ([]*pathGroup, error) {
 
 // verifyGroup verifies a group of paths
 func verifyGroup(group *pathGroup, rootDir string) error {
-	path := group.head
-	fpath := filepath.Join(rootDir, path.Path)
-	info, err := os.Lstat(fpath)
+	head := group.head
+	fullPath := filepath.Join(rootDir, head.Path)
+	info, err := os.Lstat(fullPath)
 	if err != nil {
 		return err
 	}
 
-	if err := verifyPath(path, info, fpath); err != nil {
+	if err := verifyPath(head, info, fullPath); err != nil {
 		return err
 	}
 
-	return verifyHardlinks(info, path.Path, rootDir, group.paths)
+	return verifyHardlinks(info, head.Path, rootDir, group.paths)
 }
 
 // verifyPath verifies a single path against its manifest entry
@@ -246,7 +246,7 @@ func verifyHardlinks(headInfo os.FileInfo, headPath string, rootDir string, path
 		return nil
 	}
 
-	headInode, err := getPhysicalInode(headInfo)
+	headInode, err := getInode(headInfo)
 	if err != nil {
 		return err
 	}
@@ -261,7 +261,7 @@ func verifyHardlinks(headInfo os.FileInfo, headPath string, rootDir string, path
 			return err
 		}
 
-		sibInode, err := getPhysicalInode(sibFi)
+		sibInode, err := getInode(sibFi)
 		if err != nil {
 			return err
 		}
@@ -274,8 +274,8 @@ func verifyHardlinks(headInfo os.FileInfo, headPath string, rootDir string, path
 	return nil
 }
 
-// getPhysicalInode retrieves the inode number from os.FileInfo
-func getPhysicalInode(info os.FileInfo) (uint64, error) {
+// getInode retrieves the inode number from os.FileInfo
+func getInode(info os.FileInfo) (uint64, error) {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
 		return 0, fmt.Errorf("internal error: cannot get syscall stat info for %q", info.Name())
