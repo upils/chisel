@@ -87,11 +87,11 @@ func (cmd *cmdCut) Execute(args []string) error {
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
-	isTargetEmpty, err := emptyDir(targetDir)
+	targetDirEmpty, err := dirIsEmpty(targetDir)
 	if err != nil {
 		return err
 	}
-	if !isTargetEmpty {
+	if !targetDirEmpty {
 		manifest, err := manifestutil.FromDir(release, targetDir)
 		if err != nil {
 			// TODO: When enabling the feature, error out.
@@ -170,8 +170,8 @@ func (cmd *cmdCut) Execute(args []string) error {
 	return err
 }
 
-// emptyDir checks whether the given directory is empty.
-func emptyDir(targetDir string) (bool, error) {
+// dirIsEmpty checks whether the given directory is empty.
+func dirIsEmpty(targetDir string) (bool, error) {
 	entries, err := os.ReadDir(targetDir)
 	if err != nil {
 		return false, fmt.Errorf("cannot read root directory %q: %v", targetDir, err)

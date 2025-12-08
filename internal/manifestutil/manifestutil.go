@@ -375,18 +375,18 @@ func FromDir(release *setup.Release, targetDir string) (*manifest.Manifest, erro
 	}
 
 	// Select the first manifest of the list as the reference one for now.
-	// Another heuristic could be used (ex. select the one from base-files_chisel).
-	referenceRelPath := manifestPaths[0]
-	referenceAbsPath := path.Join(targetDir, referenceRelPath)
-	reference, err := load(referenceAbsPath)
+	manifestPath := manifestPaths[0]
+	manifest, err := load(path.Join(targetDir, manifestPath))
 	if err != nil {
-		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", referenceRelPath, err)
+		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", manifestPath, err)
 	}
-	err = checkConsistency(referenceRelPath, targetDir, manifestPaths[1:])
+
+	err = checkIdentical(targetDir, manifestPaths)
 	if err != nil {
 		return nil, err
 	}
-	return reference, nil
+
+	return manifest, nil
 }
 
 // load reads, validates and returns a manifest.
@@ -416,9 +416,14 @@ func load(manifestPath string) (*manifest.Manifest, error) {
 	return mfest, nil
 }
 
-// checkConsistency checks consistency between a list of manifests and a
-// reference one.
-func checkConsistency(refRelPath string, targetDir string, manifestPaths []string) error {
+// checkIdentical checks all manifests in the passed list are identical
+// to the reference one.
+func checkIdentical(targetDir string, manifestPaths []string) error {
+	if len(manifestPaths) == 0 {
+		return nil
+	}
+	refRelPath := manifestPaths[0]
+
 	ref := path.Join(targetDir, refRelPath)
 	refHash, err := contentHash(ref)
 	if err != nil {

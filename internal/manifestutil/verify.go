@@ -103,13 +103,13 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fullPath string) error {
 	if err := verifyFileType(path, info); err != nil {
 		return err
 	}
-	
+
 	mode := info.Mode()
 	if err := verifyMode(path, mode); err != nil {
 		return err
 	}
 
-	if pathIsDir(path.Path) {
+	if strings.HasSuffix(path.Path, "/") {
 		// Directories have no additional checks
 		return nil
 	}
@@ -143,15 +143,15 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fullPath string) error {
 // verifyFileType checks that the file type matches expectations.
 func verifyFileType(path *manifest.Path, info os.FileInfo) error {
 	mode := info.Mode()
-	
-	isDir := pathIsDir(path.Path)
+
+	isDir := strings.HasSuffix(path.Path, "/")
 	if isDir && !info.IsDir() {
 		return fmt.Errorf("inconsistent content: %q expected to be a directory but found %s",
-		path.Path, mode.Type().String())
+			path.Path, mode.Type().String())
 	}
 	if !isDir && info.IsDir() {
 		return fmt.Errorf("inconsistent content: %q is a directory but manifest expects a file",
-		path.Path)
+			path.Path)
 	}
 
 	isSymlink := path.Link != ""
@@ -265,8 +265,4 @@ func getInode(info os.FileInfo) (uint64, error) {
 		return 0, fmt.Errorf("internal error: cannot get syscall stat info for %q", info.Name())
 	}
 	return stat.Ino, nil
-}
-
-func pathIsDir(path string) bool {
-	return strings.HasSuffix(path, "/")
 }
