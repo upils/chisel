@@ -21,14 +21,12 @@ func VerifyDir(mfest *manifest.Manifest, rootDir string) error {
 	if err != nil {
 		return err
 	}
-
 	for _, group := range pathGroups {
 		err = verifyGroup(group, rootDir)
 		if err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -83,7 +81,6 @@ func groupPaths(mfest *manifest.Manifest) ([]*pathGroup, error) {
 			slices.Sort(group.paths)
 		}
 	}
-
 	return pathGroups, nil
 }
 
@@ -95,22 +92,19 @@ func verifyGroup(group *pathGroup, rootDir string) error {
 	if err != nil {
 		return err
 	}
-
 	if err := verifyPath(head, info, fullPath); err != nil {
 		return err
 	}
-
 	return verifyHardlinks(info, head.Path, rootDir, group.paths)
 }
 
 // verifyPath verifies a single path against its manifest entry
-func verifyPath(path *manifest.Path, info os.FileInfo, fpath string) error {
-	mode := info.Mode()
-
+func verifyPath(path *manifest.Path, info os.FileInfo, fullPath string) error {
 	if err := verifyFileType(path, info); err != nil {
 		return err
 	}
-
+	
+	mode := info.Mode()
 	if err := verifyMode(path, mode); err != nil {
 		return err
 	}
@@ -121,7 +115,7 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fpath string) error {
 	}
 
 	if len(path.Link) > 0 {
-		return verifySymlink(path, fpath)
+		return verifySymlink(path, fullPath)
 	}
 
 	if !mode.IsRegular() {
@@ -143,35 +137,32 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fpath string) error {
 
 	// Verify hash
 	// Most expensive operation, so do it at the end.
-	return verifyHash(path, expectedHash, fpath)
+	return verifyHash(path, expectedHash, fullPath)
 }
 
 // verifyFileType checks that the file type matches expectations.
 func verifyFileType(path *manifest.Path, info os.FileInfo) error {
 	mode := info.Mode()
+	
 	isDir := pathIsDir(path.Path)
-	isSymlink := path.Link != ""
-
 	if isDir && !info.IsDir() {
 		return fmt.Errorf("inconsistent content: %q expected to be a directory but found %s",
-			path.Path, mode.Type().String())
+		path.Path, mode.Type().String())
 	}
-
 	if !isDir && info.IsDir() {
 		return fmt.Errorf("inconsistent content: %q is a directory but manifest expects a file",
-			path.Path)
+		path.Path)
 	}
 
+	isSymlink := path.Link != ""
 	if isSymlink && mode.Type() != os.ModeSymlink {
 		return fmt.Errorf("inconsistent content: %q expected to be a symlink but found %s",
 			path.Path, mode.Type().String())
 	}
-
 	if !isSymlink && mode.Type() == os.ModeSymlink {
 		return fmt.Errorf("inconsistent content: %q is a symlink but manifest expects regular file",
 			path.Path)
 	}
-
 	return nil
 }
 
@@ -183,22 +174,19 @@ func verifyMode(path *manifest.Path, mode os.FileMode) error {
 		return fmt.Errorf("inconsistent content: %q mode mismatch: expected %s, observed %s",
 			path.Path, expectedMode, actualMode)
 	}
-
 	return nil
 }
 
 // verifySymlink checks symlink target matches the manifest.
-func verifySymlink(path *manifest.Path, fpath string) error {
-	link, err := os.Readlink(fpath)
+func verifySymlink(path *manifest.Path, fullPath string) error {
+	link, err := os.Readlink(fullPath)
 	if err != nil {
 		return fmt.Errorf("internal error: cannot read symlink %q: %w", path.Path, err)
 	}
-
 	if link != path.Link {
 		return fmt.Errorf("inconsistent content: %q symlink mismatch: expected %q → %q, observed %q → %q",
 			path.Path, path.Path, path.Link, path.Path, link)
 	}
-
 	return nil
 }
 
@@ -219,7 +207,6 @@ func verifySize(path *manifest.Path, info os.FileInfo) error {
 		return fmt.Errorf("inconsistent content: %q size mismatch: expected %d bytes, observed %d bytes",
 			path.Path, expected, actual)
 	}
-
 	return nil
 }
 
@@ -229,13 +216,11 @@ func verifyHash(path *manifest.Path, expectedHash string, fpath string) error {
 	if err != nil {
 		return fmt.Errorf("internal error: cannot compute hash for %q: %w", path.Path, err)
 	}
-
 	actualHash := hex.EncodeToString(h)
 	if actualHash != expectedHash {
 		return fmt.Errorf("inconsistent content: %q hash mismatch: expected %s, observed %s",
 			path.Path, expectedHash, actualHash)
 	}
-
 	return nil
 }
 
@@ -260,14 +245,13 @@ func verifyHardlinks(headInfo os.FileInfo, headPath string, rootDir string, path
 		if err != nil {
 			return err
 		}
-
-		sibInode, err := getInode(sibFi)
+		siblingInode, err := getInode(sibFi)
 		if err != nil {
 			return err
 		}
 
 		// Verify Inode Equality.
-		if sibInode != headInode {
+		if siblingInode != headInode {
 			return fmt.Errorf("inconsistent content: broken hardlink: %s and %s expected to share the same inode", headPath, siblingPath)
 		}
 	}

@@ -87,12 +87,11 @@ func (cmd *cmdCut) Execute(args []string) error {
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
-	empty, err := emptyDir(targetDir)
+	isTargetEmpty, err := emptyDir(targetDir)
 	if err != nil {
 		return err
 	}
-
-	if !empty {
+	if !isTargetEmpty {
 		manifest, err := manifestutil.FromDir(release, targetDir)
 		if err != nil {
 			// TODO: When enabling the feature, error out.
@@ -177,6 +176,5 @@ func emptyDir(targetDir string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("cannot read root directory %q: %v", targetDir, err)
 	}
-
 	return len(entries) == 0, nil
 }

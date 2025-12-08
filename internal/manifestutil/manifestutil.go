@@ -382,12 +382,10 @@ func FromDir(release *setup.Release, targetDir string) (*manifest.Manifest, erro
 	if err != nil {
 		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", referenceRelPath, err)
 	}
-
 	err = checkConsistency(referenceRelPath, targetDir, manifestPaths[1:])
 	if err != nil {
 		return nil, err
 	}
-
 	return reference, nil
 }
 
@@ -431,16 +429,13 @@ func checkConsistency(refRelPath string, targetDir string, manifestPaths []strin
 	if err != nil {
 		return fmt.Errorf("internal error: cannot get file info for %q: %w", refRelPath, err)
 	}
-
 	refMode := refInfo.Mode()
-
 	for _, manifestRelPath := range manifestPaths {
 		manifestPath := path.Join(targetDir, manifestRelPath)
 		manifestInfo, err := os.Stat(manifestPath)
 		if err != nil {
 			return fmt.Errorf("internal error: cannot get file info for %q: %w", manifestRelPath, err)
 		}
-
 		manifestMode := manifestInfo.Mode()
 		if manifestMode != refMode {
 			return fmt.Errorf("invalid manifest: permissions on %s (%s) different from %s (%s)", manifestRelPath, manifestMode, refRelPath, refMode)
@@ -454,7 +449,6 @@ func checkConsistency(refRelPath string, targetDir string, manifestPaths []strin
 			return fmt.Errorf("invalid manifest: %s is inconsistent with %s", manifestRelPath, refRelPath)
 		}
 	}
-
 	return nil
 }
 
@@ -469,7 +463,6 @@ func contentHash(path string) ([]byte, error) {
 	if _, err := io.Copy(h, f); err != nil {
 		return nil, err
 	}
-
 	return h.Sum(nil), nil
 }
 
@@ -484,6 +477,5 @@ func SliceKeys(mfest *manifest.Manifest) []setup.SliceKey {
 		sliceKeys = append(sliceKeys, sk)
 		return nil
 	})
-
 	return sliceKeys
 }
