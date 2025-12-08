@@ -443,7 +443,7 @@ func checkConsistency(refRelPath string, targetDir string, manifestPaths []strin
 
 		manifestMode := manifestInfo.Mode()
 		if manifestMode != refMode {
-			return fmt.Errorf("invalid manifest: permissions on %s (%s) are different from the reference manifest %s (%s)", manifestRelPath, manifestMode, refRelPath, refMode)
+			return fmt.Errorf("invalid manifest: permissions on %s (%s) different from %s (%s)", manifestRelPath, manifestMode, refRelPath, refMode)
 		}
 
 		manifestHash, err := contentHash(manifestPath)

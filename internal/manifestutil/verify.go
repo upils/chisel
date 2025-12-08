@@ -216,7 +216,7 @@ func verifySize(path *manifest.Path, info os.FileInfo) error {
 	expected := int64(path.Size)
 	actual := info.Size()
 	if actual != expected {
-		return fmt.Errorf("inconsistent file: %q size mismatch: expected %d bytes, observed %d bytes",
+		return fmt.Errorf("inconsistent content: %q size mismatch: expected %d bytes, observed %d bytes",
 			path.Path, expected, actual)
 	}
 
@@ -232,7 +232,7 @@ func verifyHash(path *manifest.Path, expectedHash string, fpath string) error {
 
 	actualHash := hex.EncodeToString(h)
 	if actualHash != expectedHash {
-		return fmt.Errorf("inconsistent file: %q hash mismatch: expected %s, observed %s",
+		return fmt.Errorf("inconsistent content: %q hash mismatch: expected %s, observed %s",
 			path.Path, expectedHash, actualHash)
 	}
 
