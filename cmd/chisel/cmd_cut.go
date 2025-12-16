@@ -97,7 +97,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 			// TODO: When enabling the feature, error out.
 			logf("Warning: %v", err)
 		} else {
-			err = manifestutil.VerifyDir(manifest, targetDir)
+			err = manifestutil.CheckDir(manifest, targetDir)
 			if err != nil {
 				// TODO: When enabling the feature, error out.
 				logf("Warning: %v", err)

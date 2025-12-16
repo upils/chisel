@@ -47,14 +47,11 @@ func FindPathsInRelease(r *setup.Release) []string {
 			allSlices = append(allSlices, slice)
 		}
 	}
-
 	manifestMap := FindPaths(allSlices)
-
 	paths := make([]string, 0, len(manifestMap))
 	for path := range manifestMap {
 		paths = append(paths, path)
 	}
-
 	return paths
 }
 

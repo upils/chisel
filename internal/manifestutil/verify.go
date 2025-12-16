@@ -12,17 +12,17 @@ import (
 	"github.com/canonical/chisel/public/manifest"
 )
 
-// VerifyDir verifies the content of the target directory matches with
+// CheckDir checks the content of the target directory matches with
 // the manifest.
 // This function works under the assumption the manifest is valid.
 // Files not managed by chisel are ignored.
-func VerifyDir(mfest *manifest.Manifest, rootDir string) error {
-	pathGroups, err := groupPaths(mfest)
+func CheckDir(mfest *manifest.Manifest, rootDir string) error {
+	pathGroups, err := pathGroups(mfest)
 	if err != nil {
 		return err
 	}
 	for _, group := range pathGroups {
-		err = verifyGroup(group, rootDir)
+		err = checkGroup(group, rootDir)
 		if err != nil {
 			return err
 		}
@@ -35,19 +35,19 @@ type pathGroup struct {
 	paths []string
 }
 
-// groupPaths groups paths by inode.
+// pathGroups groups paths by inode.
 // Returns a slice of path groups where each group represents either:
 // - A standalone file (inode 0)
 // - A set of hardlinked files (same non-zero inode)
-func groupPaths(mfest *manifest.Manifest) ([]*pathGroup, error) {
-	pathGroups := []*pathGroup{}
+func pathGroups(mfest *manifest.Manifest) ([]*pathGroup, error) {
+	groups := []*pathGroup{}
 	inodeToGroup := make(map[uint64]*pathGroup)
 
 	err := mfest.IteratePaths("", func(path *manifest.Path) error {
 		inode := path.Inode
 		if inode == 0 {
 			// Standalone path
-			pathGroups = append(pathGroups, &pathGroup{
+			groups = append(groups, &pathGroup{
 				head:  path,
 				paths: []string{path.Path},
 			})
@@ -63,7 +63,7 @@ func groupPaths(mfest *manifest.Manifest) ([]*pathGroup, error) {
 				paths: []string{path.Path},
 			}
 			inodeToGroup[inode] = group
-			pathGroups = append(pathGroups, group)
+			groups = append(groups, group)
 			return nil
 		}
 		// Add path to the existing group
@@ -76,36 +76,34 @@ func groupPaths(mfest *manifest.Manifest) ([]*pathGroup, error) {
 	}
 
 	// Sort paths in groups for deterministic behavior
-	for _, group := range pathGroups {
+	for _, group := range groups {
 		if len(group.paths) > 1 {
 			slices.Sort(group.paths)
 		}
 	}
-	return pathGroups, nil
+	return groups, nil
 }
 
-// verifyGroup verifies a group of paths
-func verifyGroup(group *pathGroup, rootDir string) error {
+func checkGroup(group *pathGroup, rootDir string) error {
 	head := group.head
 	fullPath := filepath.Join(rootDir, head.Path)
 	info, err := os.Lstat(fullPath)
 	if err != nil {
 		return err
 	}
-	if err := verifyPath(head, info, fullPath); err != nil {
+	if err := checkPath(head, info, fullPath); err != nil {
 		return err
 	}
-	return verifyHardlinks(info, head.Path, rootDir, group.paths)
+	return checkHardlinks(info, head.Path, rootDir, group.paths)
 }
 
-// verifyPath verifies a single path against its manifest entry
-func verifyPath(path *manifest.Path, info os.FileInfo, fullPath string) error {
-	if err := verifyFileType(path, info); err != nil {
+func checkPath(path *manifest.Path, info os.FileInfo, fullPath string) error {
+	if err := checkFileType(path, info); err != nil {
 		return err
 	}
 
 	mode := info.Mode()
-	if err := verifyMode(path, mode); err != nil {
+	if err := checkMode(path, mode); err != nil {
 		return err
 	}
 
@@ -115,7 +113,7 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fullPath string) error {
 	}
 
 	if len(path.Link) > 0 {
-		return verifySymlink(path, fullPath)
+		return checkSymlink(path, fullPath)
 	}
 
 	if !mode.IsRegular() {
@@ -131,25 +129,24 @@ func verifyPath(path *manifest.Path, info os.FileInfo, fullPath string) error {
 		return nil
 	}
 
-	if err := verifySize(path, info); err != nil {
+	if err := checkSize(path, info); err != nil {
 		return err
 	}
 
 	// Verify hash
 	// Most expensive operation, so do it at the end.
-	return verifyHash(path, expectedHash, fullPath)
+	return checkHash(path, expectedHash, fullPath)
 }
 
-// verifyFileType checks that the file type matches expectations.
-func verifyFileType(path *manifest.Path, info os.FileInfo) error {
+func checkFileType(path *manifest.Path, info os.FileInfo) error {
 	mode := info.Mode()
 
-	isDir := strings.HasSuffix(path.Path, "/")
-	if isDir && !info.IsDir() {
+	pathIsDir := strings.HasSuffix(path.Path, "/")
+	if pathIsDir && !info.IsDir() {
 		return fmt.Errorf("inconsistent content: %q expected to be a directory but found %s",
 			path.Path, mode.Type().String())
 	}
-	if !isDir && info.IsDir() {
+	if !pathIsDir && info.IsDir() {
 		return fmt.Errorf("inconsistent content: %q is a directory but manifest expects a file",
 			path.Path)
 	}
@@ -166,8 +163,7 @@ func verifyFileType(path *manifest.Path, info os.FileInfo) error {
 	return nil
 }
 
-// verifyMode checks file permissions match the manifest.
-func verifyMode(path *manifest.Path, mode os.FileMode) error {
+func checkMode(path *manifest.Path, mode os.FileMode) error {
 	expectedMode := path.Mode
 	actualMode := fmt.Sprintf("0%o", unixPerm(mode))
 	if actualMode != expectedMode {
@@ -177,8 +173,7 @@ func verifyMode(path *manifest.Path, mode os.FileMode) error {
 	return nil
 }
 
-// verifySymlink checks symlink target matches the manifest.
-func verifySymlink(path *manifest.Path, fullPath string) error {
+func checkSymlink(path *manifest.Path, fullPath string) error {
 	link, err := os.Readlink(fullPath)
 	if err != nil {
 		return fmt.Errorf("internal error: cannot read symlink %q: %w", path.Path, err)
@@ -199,8 +194,7 @@ func recordedHash(path *manifest.Path) string {
 	return expectedHash
 }
 
-// verifySize checks file size matches the manifest.
-func verifySize(path *manifest.Path, info os.FileInfo) error {
+func checkSize(path *manifest.Path, info os.FileInfo) error {
 	expected := int64(path.Size)
 	actual := info.Size()
 	if actual != expected {
@@ -210,8 +204,7 @@ func verifySize(path *manifest.Path, info os.FileInfo) error {
 	return nil
 }
 
-// verifyHash verifies file content hash.
-func verifyHash(path *manifest.Path, expectedHash string, fpath string) error {
+func checkHash(path *manifest.Path, expectedHash string, fpath string) error {
 	h, err := contentHash(fpath)
 	if err != nil {
 		return fmt.Errorf("internal error: cannot compute hash for %q: %w", path.Path, err)
@@ -224,8 +217,8 @@ func verifyHash(path *manifest.Path, expectedHash string, fpath string) error {
 	return nil
 }
 
-// verifyHardlinks verifies that all paths in the list share the same inode.
-func verifyHardlinks(headInfo os.FileInfo, headPath string, rootDir string, paths []string) error {
+// checkHardlinks verifies that all paths in the list share the same inode.
+func checkHardlinks(headInfo os.FileInfo, headPath string, rootDir string, paths []string) error {
 	if len(paths) == 0 {
 		// No hardlinks, nothing to do
 		return nil
