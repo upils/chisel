@@ -1,10 +1,14 @@
 package setup
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"time"
@@ -22,6 +26,7 @@ type Release struct {
 	Packages    map[string]*Package
 	Archives    map[string]*Archive
 	Maintenance *Maintenance
+	digest      string
 }
 
 type Maintenance struct {
@@ -191,10 +196,31 @@ func ReadRelease(dir string) (*Release, error) {
 		return nil, err
 	}
 
+	validationCachePath := filepath.Join(dir, "validation")
+	cachedValidationData, err := os.ReadFile(validationCachePath)
+	if err != nil && !os.IsNotExist(err) {
+		logf("Warning: cannot read cached validation: %s", err)
+	}
+	cachedValidation, err := parseValidation(cachedValidationData)
+	if err != nil {
+		logf("Warning: %s", err)
+	}
+	validation := &Validation{version: validationVersion, releaseDigest: release.digest}
+	if cachedValidation != nil && reflect.DeepEqual(cachedValidation, validation) {
+		logf("Cached validation still valid. Skipped validation.")
+		return release, nil
+	}
+
 	err = release.validate()
 	if err != nil {
 		return nil, err
 	}
+
+	err = os.WriteFile(validationCachePath, []byte(validation.String()), 0o644)
+	if err != nil {
+		logf("Warning: cannot write validation cache file: %s", err)
+	}
+
 	return release, nil
 }
 
@@ -403,18 +429,23 @@ func readRelease(baseDir string) (*Release, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot read release definition: %s", err)
 	}
+
+	h := sha256.New()
+	h.Write(data)
+
 	release, err := parseRelease(baseDir, filePath, data)
 	if err != nil {
 		return nil, err
 	}
-	err = readSlices(release, baseDir, filepath.Join(baseDir, "slices"))
+	err = readSlices(release, baseDir, filepath.Join(baseDir, "slices"), h)
 	if err != nil {
 		return nil, err
 	}
+	release.digest = hex.EncodeToString(h.Sum(nil))
 	return release, err
 }
 
-func readSlices(release *Release, baseDir, dirName string) error {
+func readSlices(release *Release, baseDir, dirName string, h hash.Hash) error {
 	entries, err := os.ReadDir(dirName)
 	if err != nil {
 		return fmt.Errorf("cannot read %s%c directory", stripBase(baseDir, dirName), filepath.Separator)
@@ -422,7 +453,7 @@ func readSlices(release *Release, baseDir, dirName string) error {
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			err := readSlices(release, baseDir, filepath.Join(dirName, entry.Name()))
+			err := readSlices(release, baseDir, filepath.Join(dirName, entry.Name()), h)
 			if err != nil {
 				return err
 			}
@@ -446,6 +477,8 @@ func readSlices(release *Release, baseDir, dirName string) error {
 			// Errors from package os generally include the path.
 			return fmt.Errorf("cannot read slice definition file: %v", err)
 		}
+
+		h.Write(data)
 
 		pkg, err := parsePackage(baseDir, pkgName, stripBase(baseDir, pkgPath), data)
 		if err != nil {
@@ -602,4 +635,33 @@ func sortPair(name1, name2 string) (sorted1, sorted2 string) {
 		return name1, name2
 	}
 	return name2, name1
+}
+
+// To simplify this should likely be replaced with the chisel version
+const validationVersion = "v1"
+
+type Validation struct {
+	releaseDigest string
+	// Validation logic version.
+	// Validation rules can change without the release changing.
+	// So make sure the same release is validated with new rules.
+	version string
+}
+
+func (v *Validation) String() string {
+	return v.version + ":" + v.releaseDigest
+}
+
+func parseValidation(data []byte) (*Validation, error) {
+	version, digest, found := strings.Cut(string(data), ":")
+	if !found {
+		return nil, fmt.Errorf("cannot parse validation: invalid data")
+	}
+	if len(version) == 0 {
+		return nil, fmt.Errorf("cannot parse validation: missing version")
+	}
+	if len(digest) == 0 {
+		return nil, fmt.Errorf("cannot parse validation: missing release digest")
+	}
+	return &Validation{version: version, releaseDigest: digest}, nil
 }
