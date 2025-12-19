@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"time"
 
@@ -76,40 +74,21 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	// Get targetDir path
-	// Note: This is already done in `slicer.Run`. Extract it and avoid doing it twice?
-	targetDir := filepath.Clean(cmd.RootDir)
-	if !filepath.IsAbs(targetDir) {
-		dir, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("cannot obtain current directory: %w", err)
-		}
-		targetDir = filepath.Join(dir, targetDir)
-	}
-
-	targetDirEmpty, err := dirIsEmpty(targetDir)
+	manifest, err := manifestutil.FromDir(release, cmd.RootDir)
 	if err != nil {
-		return err
-	}
-	if !targetDirEmpty {
-		manifest, err := manifestutil.FromDir(release, targetDir)
+		// TODO: When enabling the feature, error out.
+		logf("Warning: %v", err)
+	} else {
+		err = manifestutil.CheckDir(manifest, cmd.RootDir)
 		if err != nil {
 			// TODO: When enabling the feature, error out.
 			logf("Warning: %v", err)
-		} else {
-			err = manifestutil.CheckDir(manifest, targetDir)
-			if err != nil {
-				// TODO: When enabling the feature, error out.
-				logf("Warning: %v", err)
-			}
-			// Merge the slice keys used to build the existing rootfs with the ones
-			// explicitly requested slices.
-			// Previous slice keys contain both explicitly requested slices and slices
-			// resolved following essentials.
-			for _, s := range manifestutil.SliceKeys(manifest) {
-				if !slices.Contains(sliceKeys, s) {
-					sliceKeys = append(sliceKeys, s)
-				}
+		}
+		// Merge the slice keys used to build the existing rootfs with the ones
+		// explicitly requested slices.
+		for _, s := range manifestutil.SliceKeys(manifest) {
+			if !slices.Contains(sliceKeys, s) {
+				sliceKeys = append(sliceKeys, s)
 			}
 		}
 	}
@@ -168,13 +147,4 @@ func (cmd *cmdCut) Execute(args []string) error {
 		TargetDir: cmd.RootDir,
 	})
 	return err
-}
-
-// dirIsEmpty checks whether the given directory is empty.
-func dirIsEmpty(targetDir string) (bool, error) {
-	entries, err := os.ReadDir(targetDir)
-	if err != nil {
-		return false, fmt.Errorf("cannot read root directory %q: %v", targetDir, err)
-	}
-	return len(entries) == 0, nil
 }

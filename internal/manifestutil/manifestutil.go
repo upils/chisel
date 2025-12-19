@@ -362,15 +362,30 @@ func Validate(mfest *manifest.Manifest) (err error) {
 	return nil
 }
 
-// FromDir extracts, validates and returns the manifest from a targetDir
-func FromDir(release *setup.Release, targetDir string) (*manifest.Manifest, error) {
+// FromDir extracts, validates and returns the manifest from a rootDir
+func FromDir(release *setup.Release, rootDir string) (*manifest.Manifest, error) {
+	targetDir := filepath.Clean(rootDir)
+	if !filepath.IsAbs(targetDir) {
+		dir, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("cannot obtain current directory: %w", err)
+		}
+		targetDir = filepath.Join(dir, targetDir)
+	}
+	entries, err := os.ReadDir(targetDir)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read root directory %q: %v", targetDir, err)
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no manifest generated for this release")
+	}
+
 	manifestPaths := FindPathsInRelease(release)
 	if len(manifestPaths) == 0 {
 		// No manifest in the release means it cannot produce a rootfs that can
 		// be recut. Treat this case as cutting a new rootfs.
 		return nil, fmt.Errorf("no manifest generated for this release")
 	}
-
 	// Select the first manifest of the list as the reference one for now.
 	manifestPath := manifestPaths[0]
 	manifest, err := load(path.Join(targetDir, manifestPath))
