@@ -362,8 +362,8 @@ func Validate(mfest *manifest.Manifest) (err error) {
 	return nil
 }
 
-// FromDir extracts, validates and returns the manifest from a rootDir
-func FromDir(release *setup.Release, rootDir string) (*manifest.Manifest, error) {
+// FromDir extracts, checks and returns a manifest from a rootDir
+func FromDir(manifestPaths []string, rootDir string) (*manifest.Manifest, error) {
 	targetDir := filepath.Clean(rootDir)
 	if !filepath.IsAbs(targetDir) {
 		dir, err := os.Getwd()
@@ -372,32 +372,15 @@ func FromDir(release *setup.Release, rootDir string) (*manifest.Manifest, error)
 		}
 		targetDir = filepath.Join(dir, targetDir)
 	}
-	entries, err := os.ReadDir(targetDir)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read root directory %q: %v", targetDir, err)
-	}
-	if len(entries) == 0 {
-		return nil, fmt.Errorf("no manifest generated for this release")
-	}
-
-	manifestPaths := FindPathsInRelease(release)
-	if len(manifestPaths) == 0 {
-		// No manifest in the release means it cannot produce a rootfs that can
-		// be recut. Treat this case as cutting a new rootfs.
-		return nil, fmt.Errorf("no manifest generated for this release")
-	}
-	// Select the first manifest of the list as the reference one for now.
 	manifestPath := manifestPaths[0]
 	manifest, err := load(path.Join(targetDir, manifestPath))
 	if err != nil {
 		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", manifestPath, err)
 	}
-
 	err = checkIdentical(targetDir, manifestPaths)
 	if err != nil {
 		return nil, err
 	}
-
 	return manifest, nil
 }
 
@@ -428,8 +411,7 @@ func load(manifestPath string) (*manifest.Manifest, error) {
 	return mfest, nil
 }
 
-// checkIdentical checks all manifests in the passed list are identical
-// to the reference one.
+// checkIdentical checks all manifests are identical.
 func checkIdentical(targetDir string, manifestPaths []string) error {
 	if len(manifestPaths) == 0 {
 		return nil

@@ -74,25 +74,27 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	manifest, err := manifestutil.FromDir(release, cmd.RootDir)
-	if err != nil {
-		// TODO: When enabling the feature, error out.
-		logf("Warning: %v", err)
-	} else {
-		err = manifestutil.CheckDir(manifest, cmd.RootDir)
+	manifestPaths := manifestutil.FindPathsInRelease(release)
+	if len(manifestPaths) > 0 {
+		manifest, err := manifestutil.FromDir(manifestPaths, cmd.RootDir)
 		if err != nil {
-			// TODO: When enabling the feature, error out.
 			logf("Warning: %v", err)
-		}
-		// Merge the slice keys used to build the existing rootfs with the ones
-		// explicitly requested slices.
-		for _, s := range manifestutil.SliceKeys(manifest) {
-			if !slices.Contains(sliceKeys, s) {
-				sliceKeys = append(sliceKeys, s)
+		} else {
+			err = manifestutil.CheckDir(manifest, cmd.RootDir)
+			if err != nil {
+				logf("Warning: %v", err)
+			} else {
+				// Merge the slice keys used to build the existing rootfs with the ones
+				// explicitly requested.
+				for _, s := range manifestutil.SliceKeys(manifest) {
+					if !slices.Contains(sliceKeys, s) {
+						sliceKeys = append(sliceKeys, s)
+					}
+				}
 			}
 		}
 	}
-
+	
 	selection, err := setup.Select(release, sliceKeys, cmd.Arch)
 	if err != nil {
 		return err
