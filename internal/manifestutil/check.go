@@ -66,26 +66,24 @@ func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 		default:
 			return fmt.Errorf("inconsistent content: %q has unrecognized type %s", fullPath, mode.String())
 		}
-		if ftype != fs.ModeDir {
-			stat, ok := info.Sys().(*syscall.Stat_t)
-			if !ok {
-				return fmt.Errorf("internal error: cannot get syscall stat info for %q", info.Name())
-			}
-			inode = stat.Ino
-		}
 		fsEntryInfo := &pathInfo{
 			mode: fmt.Sprintf("0%o", unixPerm(mode)),
 			size: size,
 			link: link,
 			hash: hash,
 		}
-
 		if !reflect.DeepEqual(mfestPathInfo, fsEntryInfo) {
 			return fmt.Errorf("inconsistent content at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo, fsEntryInfo)
 		}
+
+		// Check hardlink
 		if path.Inode != 0 {
-			if inode == 0 {
-				return fmt.Errorf("inconsistent content at %q: expected hardlinks", path.Path)
+			if ftype != fs.ModeDir {
+				stat, ok := info.Sys().(*syscall.Stat_t)
+				if !ok {
+					return fmt.Errorf("internal error: cannot get syscall stat info for %q", info.Name())
+				}
+				inode = stat.Ino
 			}
 			recordedInode, ok := mfestInodeToFSInode[path.Inode]
 			if !ok {
