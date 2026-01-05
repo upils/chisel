@@ -79,7 +79,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 		// TODO: When enabling the feature, error out.
 		logf("Warning: %v", err)
 	} else {
-		err = manifestutil.CheckDir(manifest, cmd.RootDir)
+		err = manifestutil.CheckDir2(manifest, cmd.RootDir)
 		if err != nil {
 			// TODO: When enabling the feature, error out.
 			logf("Warning: %v", err)

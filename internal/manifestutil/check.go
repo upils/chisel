@@ -3,14 +3,109 @@ package manifestutil
 import (
 	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"syscall"
 
 	"github.com/canonical/chisel/public/manifest"
 )
+
+type pathInfo struct {
+	mode  string
+	size  int64
+	link  string
+	hash  string
+	inode uint64
+}
+
+func collectInfo(fullPath string) (*pathInfo, error) {
+	var err error
+	var link string
+	var hash string
+	var size int64
+	var inode uint64
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	mode := info.Mode()
+	ftype := mode & fs.ModeType
+	switch ftype {
+	case fs.ModeDir:
+		// Nothing to do
+	case fs.ModeSymlink:
+		link, err = os.Readlink(fullPath)
+		if err != nil {
+			return nil, fmt.Errorf("internal error: cannot read symlink %q: %w", fullPath, err)
+		}
+	case 0: // Regular
+		h, err := contentHash(fullPath)
+		if err != nil {
+			return nil, fmt.Errorf("internal error: cannot compute hash for %q: %w", fullPath, err)
+		}
+		hash = hex.EncodeToString(h)
+		size = info.Size()
+	default:
+		return nil, fmt.Errorf("inconsistent content: %q has unrecognized type %s", fullPath, mode.String())
+	}
+	if ftype != fs.ModeDir {
+		inode, err = getInode(info)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &pathInfo{
+		mode:  fmt.Sprintf("0%o", unixPerm(mode)),
+		size:  size,
+		link:  link,
+		hash:  hash,
+		inode: inode,
+	}, nil
+}
+
+// CheckDir checks the content of the target directory matches with
+// the manifest.
+// This function works under the assumption the manifest is valid.
+// Files not managed by chisel are ignored.
+func CheckDir2(mfest *manifest.Manifest, rootDir string) error {
+	var inodes []uint64
+	pathsByInodes := make(map[uint64][]string)
+	err := mfest.IteratePaths("", func(path *manifest.Path) error {
+		fullPath := filepath.Join(rootDir, path.Path)
+		collected, err := collectInfo(fullPath)
+		if err != nil {
+			return err
+		}
+
+		if collected.inode != 0 {
+			inode := collected.inode
+			if len(pathsByInodes[inode]) == 1 {
+				inodes = append(inodes, inode)
+			}
+			pathsByInodes[inode] = append(pathsByInodes[inode], path.Path)
+		}
+		expected := &pathInfo{
+			mode: path.Mode,
+			size: int64(path.Size),
+			link: path.Link,
+			// inode: path.Inode,
+			hash: recordedHash(path),
+		}
+		// Exclude manifest files
+		if filepath.Base(path.Path) == DefaultFilename {
+			return nil
+		}
+		if !reflect.DeepEqual(collected, expected) {
+			return fmt.Errorf("inconsistent content at %q:  expected %+v, observed %+v", path.Path, expected, collected)
+		}
+		return nil
+	})
+	return err
+}
 
 // CheckDir checks the content of the target directory matches with
 // the manifest.
