@@ -6,7 +6,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/setup"
+	"github.com/canonical/chisel/public/manifest"
 )
 
 // TODO These need testing
@@ -68,4 +70,22 @@ func obtainRelease(releaseStr string) (release *setup.Release, err error) {
 		return nil, err
 	}
 	return release, nil
+}
+
+// obtainManifest returns the manifest extracted from the targetDir if the content
+// matches the manifest.
+func obtainManifest(release *setup.Release, targetDir string) (*manifest.Manifest, error) {
+	manifestPaths := manifestutil.FindPathsInRelease(release)
+	if len(manifestPaths) == 0 {
+		return nil, nil
+	}
+	manifest, err := manifestutil.FromDir(manifestPaths, targetDir)
+	if err != nil {
+		return nil, err
+	}
+	err = manifestutil.CheckDir(manifest, targetDir)
+	if err != nil {
+		return nil, err
+	}
+	return manifest, nil
 }

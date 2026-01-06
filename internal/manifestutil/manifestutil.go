@@ -467,6 +467,9 @@ func contentHash(path string) ([]byte, error) {
 
 // SliceKeys returns setup.SliceKeys from a manifest.
 func SliceKeys(mfest *manifest.Manifest) []setup.SliceKey {
+	if mfest == nil {
+		return nil
+	}
 	sliceKeys := []setup.SliceKey{}
 	mfest.IterateSlices("", func(slice *manifest.Slice) error {
 		sk, err := setup.ParseSliceKey(slice.Name)
