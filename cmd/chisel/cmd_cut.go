@@ -9,9 +9,9 @@ import (
 
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/cache"
-	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
+	"github.com/canonical/chisel/public/manifest"
 )
 
 var shortCutHelp = "Cut a tree with selected slices"
@@ -74,16 +74,21 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	manifest, err := obtainManifest(release, cmd.RootDir)
+	mfest, err := obtainManifest(release, cmd.RootDir)
 	if err != nil {
 		logf("Warning: %v", err)
 	}
 	// Merge the slice keys used to build the existing rootfs with the ones
 	// explicitly requested.
-	for _, s := range manifestutil.SliceKeys(manifest) {
-		if !slices.Contains(sliceKeys, s) {
-			sliceKeys = append(sliceKeys, s)
-		}
+	if mfest != nil {
+		mfest.IterateSlices("", func(slice *manifest.Slice) error {
+			sk, err := setup.ParseSliceKey(slice.Name)
+			if err != nil {
+				return err
+			}
+			sliceKeys = append(sliceKeys, sk)
+			return nil
+		})
 	}
 
 	selection, err := setup.Select(release, sliceKeys, cmd.Arch)
