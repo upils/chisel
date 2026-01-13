@@ -97,7 +97,6 @@ func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 	return err
 }
 
-// recordedHash returns path.FinalSHA256 if present, otherwise path.SHA256.
 func recordedHash(path *manifest.Path) string {
 	expectedHash := path.FinalSHA256
 	if expectedHash == "" {
