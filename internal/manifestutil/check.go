@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"reflect"
 	"syscall"
 
 	"github.com/canonical/chisel/public/manifest"
@@ -72,8 +71,17 @@ func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 			link: link,
 			hash: hash,
 		}
-		if !reflect.DeepEqual(mfestPathInfo, fsEntryInfo) {
-			return fmt.Errorf("inconsistent content at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo, fsEntryInfo)
+		if mfestPathInfo.mode != fsEntryInfo.mode {
+			return fmt.Errorf("inconsistent mode at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo.mode, fsEntryInfo.mode)
+		}
+		if mfestPathInfo.size != fsEntryInfo.size {
+			return fmt.Errorf("inconsistent size at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo.size, fsEntryInfo.size)
+		}
+		if mfestPathInfo.link != fsEntryInfo.link {
+			return fmt.Errorf("inconsistent link at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo.link, fsEntryInfo.link)
+		}
+		if mfestPathInfo.hash != fsEntryInfo.hash {
+			return fmt.Errorf("inconsistent hash at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo.hash, fsEntryInfo.hash)
 		}
 
 		// Check hardlink
