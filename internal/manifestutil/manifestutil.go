@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -48,11 +49,7 @@ func FindPathsInRelease(r *setup.Release) []string {
 		}
 	}
 	manifestMap := FindPaths(allSlices)
-	paths := make([]string, 0, len(manifestMap))
-	for path := range manifestMap {
-		paths = append(paths, path)
-	}
-	return paths
+	return slices.Sorted(maps.Keys(manifestMap))
 }
 
 type WriteOptions struct {
