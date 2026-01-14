@@ -359,7 +359,7 @@ func Validate(mfest *manifest.Manifest) (err error) {
 	return nil
 }
 
-// FromDir extracts, checks and returns a manifest from a rootDir
+// FromDir extracts, validates and returns the first manifest found in a rootDir
 func FromDir(manifestPaths []string, rootDir string) (*manifest.Manifest, error) {
 	targetDir := filepath.Clean(rootDir)
 	if !filepath.IsAbs(targetDir) {
@@ -369,19 +369,27 @@ func FromDir(manifestPaths []string, rootDir string) (*manifest.Manifest, error)
 		}
 		targetDir = filepath.Join(dir, targetDir)
 	}
-	manifestPath := manifestPaths[0]
-	manifest, err := load(path.Join(targetDir, manifestPath))
-	if err != nil {
-		return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", manifestPath, err)
+	var mfest *manifest.Manifest
+	var err error
+	for _, p := range manifestPaths {
+		manifestPath := path.Join(targetDir, p)
+		mfest, err = load(manifestPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", manifestPath, err)
+		}
+		err = Validate(mfest)
+		if err != nil {
+			return nil, err
+		}
+		return mfest, nil
 	}
-	err = checkIdentical(targetDir, manifestPaths)
-	if err != nil {
-		return nil, err
-	}
-	return manifest, nil
+	return nil, nil
 }
 
-// load reads, validates and returns a manifest.
+// load reads and returns a manifest.
 func load(manifestPath string) (*manifest.Manifest, error) {
 	f, err := os.Open(manifestPath)
 	if err != nil {
@@ -399,12 +407,6 @@ func load(manifestPath string) (*manifest.Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	err = Validate(mfest)
-	if err != nil {
-		return nil, err
-	}
-
 	return mfest, nil
 }
 

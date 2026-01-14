@@ -9,6 +9,7 @@ import (
 
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/cache"
+	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
 	"github.com/canonical/chisel/public/manifest"
@@ -74,21 +75,29 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	mfest, err := obtainManifest(release, cmd.RootDir)
-	if err != nil {
-		logf("Warning: %v", err)
-	}
-	// Merge the slice keys used to build the existing rootfs with the ones
-	// explicitly requested.
-	if mfest != nil {
-		mfest.IterateSlices("", func(slice *manifest.Slice) error {
-			sk, err := setup.ParseSliceKey(slice.Name)
+	manifestPaths := manifestutil.FindPathsInRelease(release)
+	if len(manifestPaths) >= 0 {
+		mfest, err := manifestutil.FromDir(manifestPaths, cmd.RootDir)
+		if err != nil {
+			return err
+		}
+		if mfest != nil {
+			err = manifestutil.CheckDir(mfest, cmd.RootDir)
 			if err != nil {
-				return err
+				logf("Warning: %v", err)
+			} else {
+				// Merge the slice keys used to build the existing rootfs with the ones
+				// explicitly requested.
+				mfest.IterateSlices("", func(slice *manifest.Slice) error {
+					sk, err := setup.ParseSliceKey(slice.Name)
+					if err != nil {
+						return err
+					}
+					sliceKeys = append(sliceKeys, sk)
+					return nil
+				})
 			}
-			sliceKeys = append(sliceKeys, sk)
-			return nil
-		})
+		}
 	}
 
 	selection, err := setup.Select(release, sliceKeys, cmd.Arch)
