@@ -1,7 +1,6 @@
 package manifestutil
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"io/fs"
@@ -359,7 +358,7 @@ func Validate(mfest *manifest.Manifest) (err error) {
 	return nil
 }
 
-// FromDir extracts, validates and returns the first manifest found in a rootDir
+// FromDir extracts, validates and returns the first manifest found in a rootDir.
 func FromDir(manifestPaths []string, rootDir string) (*manifest.Manifest, error) {
 	targetDir := filepath.Clean(rootDir)
 	if !filepath.IsAbs(targetDir) {
@@ -408,58 +407,4 @@ func load(manifestPath string) (*manifest.Manifest, error) {
 		return nil, err
 	}
 	return mfest, nil
-}
-
-// checkIdentical checks all manifests are identical.
-func checkIdentical(targetDir string, manifestPaths []string) error {
-	if len(manifestPaths) == 0 {
-		return nil
-	}
-	refRelPath := manifestPaths[0]
-
-	ref := path.Join(targetDir, refRelPath)
-	refHash, err := contentHash(ref)
-	if err != nil {
-		return fmt.Errorf("internal error: cannot compute hash for %q: %w", refRelPath, err)
-	}
-
-	refInfo, err := os.Stat(ref)
-	if err != nil {
-		return fmt.Errorf("internal error: cannot get file info for %q: %w", refRelPath, err)
-	}
-	refMode := refInfo.Mode()
-	for _, manifestRelPath := range manifestPaths {
-		manifestPath := path.Join(targetDir, manifestRelPath)
-		manifestInfo, err := os.Stat(manifestPath)
-		if err != nil {
-			return fmt.Errorf("internal error: cannot get file info for %q: %w", manifestRelPath, err)
-		}
-		manifestMode := manifestInfo.Mode()
-		if manifestMode != refMode {
-			return fmt.Errorf("invalid manifest: permissions on %s (%s) different from %s (%s)", manifestRelPath, manifestMode, refRelPath, refMode)
-		}
-
-		manifestHash, err := contentHash(manifestPath)
-		if err != nil {
-			return fmt.Errorf("internal error: cannot compute hash for %q: %w", manifestRelPath, err)
-		}
-		if !slices.Equal(manifestHash, refHash) {
-			return fmt.Errorf("invalid manifest: %s is inconsistent with %s", manifestRelPath, refRelPath)
-		}
-	}
-	return nil
-}
-
-func contentHash(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return nil, err
-	}
-	return h.Sum(nil), nil
 }

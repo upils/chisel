@@ -1,8 +1,10 @@
 package manifestutil
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -24,34 +26,43 @@ type pathInfo struct {
 // Files not managed by chisel are ignored.
 func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 	mfestInodeToFSInode := make(map[uint64]uint64)
+	var mfestRefHash string
 	err := mfest.IteratePaths("", func(path *manifest.Path) error {
-		// Skip manifest files
+		fullPath := filepath.Join(rootDir, path.Path)
+		pathHash := recordedHash(path)
 		if filepath.Base(path.Path) == DefaultFilename {
-			return nil
+			// Manifests must all be the same.
+			// Recorded hash is empty.
+			// So set the first computed hash as the "recorded" value.
+			if len(mfestRefHash) == 0 {
+				h, err := contentHash(fullPath)
+				if err != nil {
+					return fmt.Errorf("internal error: cannot compute hash for %q: %w", fullPath, err)
+				}
+				mfestRefHash = hex.EncodeToString(h)
+			}
+			pathHash = mfestRefHash
 		}
 		mfestPathInfo := &pathInfo{
 			mode: path.Mode,
 			size: int64(path.Size),
 			link: path.Link,
-			hash: recordedHash(path),
+			hash: pathHash,
 		}
 
-		var link string
-		var hash string
-		var size int64
-		var inode uint64
-		fullPath := filepath.Join(rootDir, path.Path)
+		fsEntryInfo := &pathInfo{}
 		info, err := os.Lstat(fullPath)
 		if err != nil {
 			return err
 		}
 		mode := info.Mode()
+		fsEntryInfo.mode = fmt.Sprintf("0%o", unixPerm(mode))
 		ftype := mode & fs.ModeType
 		switch ftype {
 		case fs.ModeDir:
 			// Nothing to do
 		case fs.ModeSymlink:
-			link, err = os.Readlink(fullPath)
+			fsEntryInfo.link, err = os.Readlink(fullPath)
 			if err != nil {
 				return fmt.Errorf("internal error: cannot read symlink %q: %w", fullPath, err)
 			}
@@ -60,17 +71,12 @@ func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 			if err != nil {
 				return fmt.Errorf("internal error: cannot compute hash for %q: %w", fullPath, err)
 			}
-			hash = hex.EncodeToString(h)
-			size = info.Size()
+			fsEntryInfo.hash = hex.EncodeToString(h)
+			fsEntryInfo.size = info.Size()
 		default:
 			return fmt.Errorf("inconsistent content: %q has unrecognized type %s", fullPath, mode.String())
 		}
-		fsEntryInfo := &pathInfo{
-			mode: fmt.Sprintf("0%o", unixPerm(mode)),
-			size: size,
-			link: link,
-			hash: hash,
-		}
+
 		if mfestPathInfo.mode != fsEntryInfo.mode {
 			return fmt.Errorf("inconsistent mode at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo.mode, fsEntryInfo.mode)
 		}
@@ -86,13 +92,14 @@ func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 
 		// Check hardlink
 		if path.Inode != 0 {
-			if ftype != fs.ModeDir {
-				stat, ok := info.Sys().(*syscall.Stat_t)
-				if !ok {
-					return fmt.Errorf("internal error: cannot get syscall stat info for %q", info.Name())
-				}
-				inode = stat.Ino
+			if ftype == fs.ModeDir {
+				return fmt.Errorf("iconsistent type at %q: recorded a hardlinked path, observed a directory", info.Name())
 			}
+			stat, ok := info.Sys().(*syscall.Stat_t)
+			if !ok {
+				return fmt.Errorf("internal error: cannot get syscall stat info for %q", info.Name())
+			}
+			inode := stat.Ino
 			recordedInode, ok := mfestInodeToFSInode[path.Inode]
 			if !ok {
 				mfestInodeToFSInode[path.Inode] = inode
@@ -103,6 +110,20 @@ func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 		return nil
 	})
 	return err
+}
+
+func contentHash(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
 }
 
 func recordedHash(path *manifest.Path) string {
