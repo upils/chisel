@@ -37,7 +37,7 @@ func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 			if len(mfestRefHash) == 0 {
 				h, err := contentHash(fullPath)
 				if err != nil {
-					return fmt.Errorf("internal error: cannot compute hash for %q: %w", fullPath, err)
+					return fmt.Errorf("cannot compute hash for %q: %w", fullPath, err)
 				}
 				mfestRefHash = hex.EncodeToString(h)
 			}
@@ -64,12 +64,12 @@ func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 		case fs.ModeSymlink:
 			fsEntryInfo.link, err = os.Readlink(fullPath)
 			if err != nil {
-				return fmt.Errorf("internal error: cannot read symlink %q: %w", fullPath, err)
+				return fmt.Errorf("cannot read symlink %q: %w", fullPath, err)
 			}
 		case 0: // Regular
 			h, err := contentHash(fullPath)
 			if err != nil {
-				return fmt.Errorf("internal error: cannot compute hash for %q: %w", fullPath, err)
+				return fmt.Errorf("cannot compute hash for %q: %w", fullPath, err)
 			}
 			fsEntryInfo.hash = hex.EncodeToString(h)
 			fsEntryInfo.size = info.Size()
@@ -97,7 +97,7 @@ func CheckDir(mfest *manifest.Manifest, rootDir string) error {
 			}
 			stat, ok := info.Sys().(*syscall.Stat_t)
 			if !ok {
-				return fmt.Errorf("internal error: cannot get syscall stat info for %q", info.Name())
+				return fmt.Errorf("cannot get syscall stat info for %q", info.Name())
 			}
 			inode := stat.Ino
 			recordedInode, ok := mfestInodeToFSInode[path.Inode]
