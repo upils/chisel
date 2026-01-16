@@ -84,7 +84,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 		if mfest != nil {
 			err = manifestutil.CheckDir(mfest, cmd.RootDir)
 			if err != nil {
-				logf("Warning: %v", err)
+				return err
 			} else {
 				// Merge the slice keys used to build the existing rootfs with the ones
 				// explicitly requested.
