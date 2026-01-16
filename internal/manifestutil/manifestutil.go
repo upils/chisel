@@ -359,12 +359,13 @@ func Validate(mfest *manifest.Manifest) (err error) {
 }
 
 // FromDir extracts, validates and returns the first manifest found in a rootDir.
-func FromDir(manifestPaths []string, rootDir string) (*manifest.Manifest, error) {
+// Also returns the path of the manifest.
+func FromDir(manifestPaths []string, rootDir string) (*manifest.Manifest, string, error) {
 	targetDir := filepath.Clean(rootDir)
 	if !filepath.IsAbs(targetDir) {
 		dir, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("cannot obtain current directory: %w", err)
+			return nil, "", fmt.Errorf("cannot obtain current directory: %w", err)
 		}
 		targetDir = filepath.Join(dir, targetDir)
 	}
@@ -377,15 +378,15 @@ func FromDir(manifestPaths []string, rootDir string) (*manifest.Manifest, error)
 			if os.IsNotExist(err) {
 				continue
 			}
-			return nil, fmt.Errorf("cannot read manifest %q from the root directory: %v", manifestPath, err)
+			return nil, "", fmt.Errorf("cannot read manifest %q from the root directory: %v", manifestPath, err)
 		}
 		err = Validate(mfest)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return mfest, nil
+		return mfest, p, nil
 	}
-	return nil, nil
+	return nil, "", nil
 }
 
 // load reads and returns a manifest.

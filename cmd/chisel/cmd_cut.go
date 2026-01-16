@@ -77,12 +77,12 @@ func (cmd *cmdCut) Execute(args []string) error {
 
 	manifestPaths := manifestutil.FindPathsInRelease(release)
 	if len(manifestPaths) >= 0 {
-		mfest, err := manifestutil.FromDir(manifestPaths, cmd.RootDir)
+		mfest, mfestPath, err := manifestutil.FromDir(manifestPaths, cmd.RootDir)
 		if err != nil {
 			return err
 		}
 		if mfest != nil {
-			err = manifestutil.CheckDir(mfest, cmd.RootDir)
+			err = manifestutil.CheckDir(mfest, mfestPath, cmd.RootDir)
 			if err != nil {
 				return err
 			} else {

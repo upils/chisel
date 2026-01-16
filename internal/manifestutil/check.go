@@ -24,24 +24,22 @@ type pathInfo struct {
 // the manifest.
 // This function works under the assumption the manifest is valid.
 // Files not managed by chisel are ignored.
-func CheckDir(mfest *manifest.Manifest, rootDir string) error {
+func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error {
+	mfestFullPath := filepath.Join(rootDir, mfestPath)
+	h, err := contentHash(mfestFullPath)
+	if err != nil {
+		return fmt.Errorf("cannot compute hash for %q: %w", mfestFullPath, err)
+	}
+	mfestHash := hex.EncodeToString(h)
+
 	mfestInodeToFSInode := make(map[uint64]uint64)
-	var mfestRefHash string
-	err := mfest.IteratePaths("", func(path *manifest.Path) error {
+	err = mfest.IteratePaths("", func(path *manifest.Path) error {
 		fullPath := filepath.Join(rootDir, path.Path)
 		pathHash := recordedHash(path)
 		if filepath.Base(path.Path) == DefaultFilename {
-			// Manifests must all be the same.
-			// Recorded hash is empty.
-			// So set the first computed hash as the "recorded" value.
-			if len(mfestRefHash) == 0 {
-				h, err := contentHash(fullPath)
-				if err != nil {
-					return fmt.Errorf("cannot compute hash for %q: %w", fullPath, err)
-				}
-				mfestRefHash = hex.EncodeToString(h)
-			}
-			pathHash = mfestRefHash
+			// Recorded hash is empty for a manifest path,
+			// so set the hash of the reference as the "recorded" value.
+			pathHash = mfestHash
 		}
 		mfestPathInfo := &pathInfo{
 			mode: path.Mode,
