@@ -77,6 +77,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 
 	manifestPaths := manifestutil.FindPathsInRelease(release)
 	if len(manifestPaths) >= 0 {
+		logf("Processing root directory...")
 		mfest, mfestPath, err := manifestutil.FromDir(manifestPaths, cmd.RootDir)
 		if err != nil {
 			return err
