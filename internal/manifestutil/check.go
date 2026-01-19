@@ -31,20 +31,27 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 		return fmt.Errorf("cannot compute hash for %q: %w", mfestFullPath, err)
 	}
 	mfestHash := hex.EncodeToString(h)
+	mfestInfo, err := os.Lstat(mfestFullPath)
+	if err != nil {
+		return err
+	}
+	mfestSize := mfestInfo.Size()
 
 	singlePathsByFSInode := make(map[uint64]string)
 	mfestInodeToFSInode := make(map[uint64]uint64)
 	err = mfest.IteratePaths("", func(path *manifest.Path) error {
 		fullPath := filepath.Join(rootDir, path.Path)
 		pathHash := recordedHash(path)
+		size := int64(path.Size)
 		if filepath.Base(path.Path) == DefaultFilename {
-			// Recorded hash is empty for a manifest path,
-			// so set the hash of the reference as the "recorded" value.
+			// Recorded hash and size are empty for a manifest path,
+			// so set the hash and size of the reference as the "recorded" values.
 			pathHash = mfestHash
+			size = mfestSize
 		}
-		mfestPathInfo := &pathInfo{
+		recordedPathInfo := &pathInfo{
 			mode: path.Mode,
-			size: int64(path.Size),
+			size: size,
 			link: path.Link,
 			hash: pathHash,
 		}
@@ -76,17 +83,17 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 			return fmt.Errorf("inconsistent content: %q has unrecognized type %s", fullPath, mode.String())
 		}
 
-		if mfestPathInfo.mode != fsEntryInfo.mode {
-			return fmt.Errorf("inconsistent mode at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo.mode, fsEntryInfo.mode)
+		if recordedPathInfo.mode != fsEntryInfo.mode {
+			return fmt.Errorf("inconsistent mode at %q: recorded %+v, observed %+v", path.Path, recordedPathInfo.mode, fsEntryInfo.mode)
 		}
-		if mfestPathInfo.size != fsEntryInfo.size {
-			return fmt.Errorf("inconsistent size at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo.size, fsEntryInfo.size)
+		if recordedPathInfo.size != fsEntryInfo.size {
+			return fmt.Errorf("inconsistent size at %q: recorded %+v, observed %+v", path.Path, recordedPathInfo.size, fsEntryInfo.size)
 		}
-		if mfestPathInfo.link != fsEntryInfo.link {
-			return fmt.Errorf("inconsistent link at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo.link, fsEntryInfo.link)
+		if recordedPathInfo.link != fsEntryInfo.link {
+			return fmt.Errorf("inconsistent link at %q: recorded %+v, observed %+v", path.Path, recordedPathInfo.link, fsEntryInfo.link)
 		}
-		if mfestPathInfo.hash != fsEntryInfo.hash {
-			return fmt.Errorf("inconsistent hash at %q: recorded %+v, observed %+v", path.Path, mfestPathInfo.hash, fsEntryInfo.hash)
+		if recordedPathInfo.hash != fsEntryInfo.hash {
+			return fmt.Errorf("inconsistent hash at %q: recorded %+v, observed %+v", path.Path, recordedPathInfo.hash, fsEntryInfo.hash)
 		}
 
 		// Check hardlink
