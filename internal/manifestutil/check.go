@@ -32,6 +32,7 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 	}
 	mfestHash := hex.EncodeToString(h)
 
+	singlePathsByFSInode := make(map[uint64]string)
 	mfestInodeToFSInode := make(map[uint64]uint64)
 	err = mfest.IteratePaths("", func(path *manifest.Path) error {
 		fullPath := filepath.Join(rootDir, path.Path)
@@ -89,20 +90,27 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 		}
 
 		// Check hardlink
-		if path.Inode != 0 {
-			if ftype == fs.ModeDir {
-				return fmt.Errorf("iconsistent type at %q: recorded a hardlinked path, observed a directory", info.Name())
-			}
+		if ftype != fs.ModeDir {
 			stat, ok := info.Sys().(*syscall.Stat_t)
 			if !ok {
 				return fmt.Errorf("cannot get syscall stat info for %q", info.Name())
 			}
 			inode := stat.Ino
-			recordedInode, ok := mfestInodeToFSInode[path.Inode]
-			if !ok {
-				mfestInodeToFSInode[path.Inode] = inode
-			} else if recordedInode != inode {
-				return fmt.Errorf("inconsistent content at %q: file hardlinked to a different inode", path.Path)
+
+			if path.Inode == 0 {
+				// This path must not be linked to any other
+				singlePath, ok := singlePathsByFSInode[inode]
+				if ok {
+					return fmt.Errorf("inconsistent content at %q: file hardlinked to %q", path.Path, singlePath)
+				}
+				singlePathsByFSInode[inode] = path.Path
+			} else {
+				recordedInode, ok := mfestInodeToFSInode[path.Inode]
+				if !ok {
+					mfestInodeToFSInode[path.Inode] = inode
+				} else if recordedInode != inode {
+					return fmt.Errorf("inconsistent content at %q: file hardlinked to a different inode", path.Path)
+				}
 			}
 		}
 		return nil
