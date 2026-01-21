@@ -5,8 +5,6 @@ import (
 	"io"
 	"io/fs"
 	"maps"
-	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -17,7 +15,6 @@ import (
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/public/jsonwall"
 	"github.com/canonical/chisel/public/manifest"
-	"github.com/klauspost/compress/zstd"
 )
 
 const DefaultFilename = "manifest.wall"
@@ -359,57 +356,11 @@ func Validate(mfest *manifest.Manifest) (err error) {
 }
 
 
-// compareSchemas compare two manifest schema strings
-func compareSchemas(va, vb string) int {
+// CompareSchemas compare two manifest schema strings
+func CompareSchemas(va, vb string) int {
 	if va == manifest.Schema && va == vb {
 		return 0
 	}
 	return -1
 }
 
-// FromDir extracts, validates and returns the first manifest found in a rootDir.
-// Also returns the path of the manifest.
-func FromDir(targetDir string, manifestPaths []string) (*manifest.Manifest, string, error) {
-	targetDir = filepath.Clean(targetDir)
-	if !filepath.IsAbs(targetDir) {
-		dir, err := os.Getwd()
-		if err != nil {
-			return nil, "", fmt.Errorf("cannot obtain current directory: %w", err)
-		}
-		targetDir = filepath.Join(dir, targetDir)
-	}
-
-	var finalMfest *manifest.Manifest
-	var finalMfestPath string
-	for _, mfestPath := range manifestPaths {
-		var mfest *manifest.Manifest
-		mfestFullPath := path.Join(targetDir, mfestPath)
-		f, err := os.Open(mfestFullPath)
-		if err != nil {
-			// TODO: handle some errors as internal ones
-			// provoking a return?
-			continue
-		}
-		defer f.Close()
-
-		r, err := zstd.NewReader(f)
-		if err != nil {
-			continue
-		}
-		defer r.Close()
-
-		mfest, err = manifest.Read(r)
-		if err != nil {
-			continue
-		}
-		err = Validate(mfest)
-		if err != nil {
-			continue
-		}
-		if finalMfest == nil || compareSchemas(mfest.Schema(), finalMfest.Schema()) > 0 {
-			finalMfest = mfest
-			finalMfestPath = mfestPath
-		}
-	}
-	return finalMfest, finalMfestPath, nil
-}

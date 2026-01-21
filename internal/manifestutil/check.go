@@ -46,6 +46,7 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 		}
 		size := int64(path.Size)
 		if filepath.Base(path.Path) == DefaultFilename {
+			// TODO Also chech hash and size are empty
 			// Recorded hash and size are empty for a manifest path,
 			// so set the hash and size of the reference as the "recorded" values.
 			pathHash = mfestHash

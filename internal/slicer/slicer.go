@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -21,6 +22,7 @@ import (
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/scripts"
 	"github.com/canonical/chisel/internal/setup"
+	"github.com/canonical/chisel/public/manifest"
 )
 
 const manifestMode fs.FileMode = 0644
@@ -536,4 +538,88 @@ func selectPkgArchives(archives map[string]archive.Archive, selection *setup.Sel
 		pkgArchive[pkg.Name] = chosen
 	}
 	return pkgArchive, nil
+}
+
+// Extract does conceptually the reverse operation as Run.
+// From a target directory, return a list of SliceKeys used to build it.
+func Extract(release *setup.Release, targetDir string) ([]setup.SliceKey, error) {
+	var sliceKeys []setup.SliceKey
+	manifestPaths := manifestutil.FindPathsInRelease(release)
+	if len(manifestPaths) > 0 {
+		logf("Processing root directory...")
+		mfest, mfestPath, err := extractValidManifest(targetDir, manifestPaths)
+		if err != nil {
+			return nil, err
+		}
+		if mfest != nil {
+			err = manifestutil.CheckDir(mfest, mfestPath, targetDir)
+			if err != nil {
+				return nil, err
+			}
+			// Merge the slice keys used to build the existing rootfs with the ones
+			// explicitly requested.
+			mfest.IterateSlices("", func(slice *manifest.Slice) error {
+				sk, err := setup.ParseSliceKey(slice.Name)
+				if err != nil {
+					return err
+				}
+				sliceKeys = append(sliceKeys, sk)
+				return nil
+			})
+
+		}
+	}
+
+	return sliceKeys, nil
+}
+
+// extractValidManifest extracts, validates and returns the first manifest found in a rootDir.
+// Also returns the path of the manifest.
+func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.Manifest, string, error) {
+	targetDir = filepath.Clean(targetDir)
+	if !filepath.IsAbs(targetDir) {
+		dir, err := os.Getwd()
+		if err != nil {
+			return nil, "", fmt.Errorf("cannot obtain current directory: %w", err)
+		}
+		targetDir = filepath.Join(dir, targetDir)
+	}
+
+	var finalMfest *manifest.Manifest
+	var finalMfestPath string
+	for _, mfestPath := range manifestPaths {
+		var mfest *manifest.Manifest
+		mfestFullPath := path.Join(targetDir, mfestPath)
+		f, err := os.Open(mfestFullPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, "", err
+		}
+		defer f.Close()
+
+		r, err := zstd.NewReader(f)
+		if err != nil {
+			// Fail?
+			continue
+		}
+		defer r.Close()
+
+		mfest, err = manifest.Read(r)
+		if err != nil {
+			continue
+		}
+		err = manifestutil.Validate(mfest)
+		if err != nil {
+			// Fail?
+			continue
+		}
+
+		if finalMfest == nil || manifestutil.CompareSchemas(mfest.Schema(), finalMfest.Schema()) > 0 {
+			finalMfest = mfest
+			finalMfestPath = mfestPath
+		}
+	}
+	return finalMfest, finalMfestPath, nil
 }
