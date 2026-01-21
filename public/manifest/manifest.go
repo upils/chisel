@@ -106,3 +106,7 @@ func iteratePrefix[T prefixable](manifest *Manifest, prefix *T, onMatch func(*T)
 	}
 	return nil
 }
+
+func (manifest *Manifest) Schema() string {
+	return manifest.db.Schema()
+}

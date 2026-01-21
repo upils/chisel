@@ -358,10 +358,19 @@ func Validate(mfest *manifest.Manifest) (err error) {
 	return nil
 }
 
+
+// compareSchemas compare two manifest schema strings
+func compareSchemas(va, vb string) int {
+	if va == manifest.Schema && va == vb {
+		return 0
+	}
+	return -1
+}
+
 // FromDir extracts, validates and returns the first manifest found in a rootDir.
 // Also returns the path of the manifest.
-func FromDir(manifestPaths []string, rootDir string) (*manifest.Manifest, string, error) {
-	targetDir := filepath.Clean(rootDir)
+func FromDir(targetDir string, manifestPaths []string) (*manifest.Manifest, string, error) {
+	targetDir = filepath.Clean(targetDir)
 	if !filepath.IsAbs(targetDir) {
 		dir, err := os.Getwd()
 		if err != nil {
@@ -369,43 +378,38 @@ func FromDir(manifestPaths []string, rootDir string) (*manifest.Manifest, string
 		}
 		targetDir = filepath.Join(dir, targetDir)
 	}
-	var mfest *manifest.Manifest
-	var err error
-	for _, p := range manifestPaths {
-		manifestPath := path.Join(targetDir, p)
-		mfest, err = load(manifestPath)
+
+	var finalMfest *manifest.Manifest
+	var finalMfestPath string
+	for _, mfestPath := range manifestPaths {
+		var mfest *manifest.Manifest
+		mfestFullPath := path.Join(targetDir, mfestPath)
+		f, err := os.Open(mfestFullPath)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, "", fmt.Errorf("cannot read manifest %q from the root directory: %v", manifestPath, err)
+			// TODO: handle some errors as internal ones
+			// provoking a return?
+			continue
+		}
+		defer f.Close()
+
+		r, err := zstd.NewReader(f)
+		if err != nil {
+			continue
+		}
+		defer r.Close()
+
+		mfest, err = manifest.Read(r)
+		if err != nil {
+			continue
 		}
 		err = Validate(mfest)
 		if err != nil {
-			return nil, "", err
+			continue
 		}
-		return mfest, p, nil
+		if finalMfest == nil || compareSchemas(mfest.Schema(), finalMfest.Schema()) > 0 {
+			finalMfest = mfest
+			finalMfestPath = mfestPath
+		}
 	}
-	return nil, "", nil
-}
-
-// load reads and returns a manifest.
-func load(manifestPath string) (*manifest.Manifest, error) {
-	f, err := os.Open(manifestPath)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	r, err := zstd.NewReader(f)
-	if err != nil {
-		return nil, err
-	}
-	defer r.Close()
-
-	mfest, err := manifest.Read(r)
-	if err != nil {
-		return nil, err
-	}
-	return mfest, nil
+	return finalMfest, finalMfestPath, nil
 }

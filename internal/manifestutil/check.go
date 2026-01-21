@@ -40,8 +40,10 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 	singlePathsByFSInode := make(map[uint64]string)
 	mfestInodeToFSInode := make(map[uint64]uint64)
 	err = mfest.IteratePaths("", func(path *manifest.Path) error {
-		fullPath := filepath.Join(rootDir, path.Path)
-		pathHash := recordedHash(path)
+		pathHash := path.FinalSHA256
+		if pathHash == "" {
+			pathHash = path.SHA256
+		}
 		size := int64(path.Size)
 		if filepath.Base(path.Path) == DefaultFilename {
 			// Recorded hash and size are empty for a manifest path,
@@ -57,6 +59,7 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 		}
 
 		fsEntryInfo := &pathInfo{}
+		fullPath := filepath.Join(rootDir, path.Path)
 		info, err := os.Lstat(fullPath)
 		if err != nil {
 			return err
@@ -137,12 +140,4 @@ func contentHash(path string) ([]byte, error) {
 		return nil, err
 	}
 	return h.Sum(nil), nil
-}
-
-func recordedHash(path *manifest.Path) string {
-	expectedHash := path.FinalSHA256
-	if expectedHash == "" {
-		expectedHash = path.SHA256
-	}
-	return expectedHash
 }
