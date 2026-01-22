@@ -547,12 +547,12 @@ func Inspect(targetDir string, release *setup.Release) ([]setup.SliceKey, error)
 	manifestPaths := manifestutil.FindPathsInRelease(release)
 	if len(manifestPaths) > 0 {
 		logf("Inspecting root directory...")
-		mfest, mfestPath, err := extractValidManifest(targetDir, manifestPaths)
+		mfest, err := extractValidManifest(targetDir, manifestPaths)
 		if err != nil {
 			return nil, err
 		}
 		if mfest != nil {
-			err = CheckDir(mfest, mfestPath, targetDir)
+			err = checkDir(mfest, targetDir)
 			if err != nil {
 				return nil, err
 			}
@@ -571,19 +571,18 @@ func Inspect(targetDir string, release *setup.Release) ([]setup.SliceKey, error)
 
 // extractValidManifest extracts and validates the first most recent manifest
 // found in a directory.
-// Returns the manigfest and its path.
-func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.Manifest, string, error) {
+// If found, returns the manifest.
+func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.Manifest, error) {
 	targetDir = filepath.Clean(targetDir)
 	if !filepath.IsAbs(targetDir) {
 		dir, err := os.Getwd()
 		if err != nil {
-			return nil, "", fmt.Errorf("cannot obtain current directory: %w", err)
+			return nil, fmt.Errorf("cannot obtain current directory: %w", err)
 		}
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
 	var finalMfest *manifest.Manifest
-	var finalMfestPath string
 	for _, mfestPath := range manifestPaths {
 		var mfest *manifest.Manifest
 		mfestFullPath := path.Join(targetDir, mfestPath)
@@ -592,13 +591,13 @@ func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.M
 			if os.IsNotExist(err) {
 				continue
 			}
-			return nil, "", err
+			return nil, err
 		}
 		defer f.Close()
 
 		r, err := zstd.NewReader(f)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 		defer r.Close()
 
@@ -613,8 +612,7 @@ func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.M
 
 		if finalMfest == nil || manifestutil.CompareSchemas(mfest.Schema(), finalMfest.Schema()) > 0 {
 			finalMfest = mfest
-			finalMfestPath = mfestPath
 		}
 	}
-	return finalMfest, finalMfestPath, nil
+	return finalMfest, nil
 }

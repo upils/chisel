@@ -23,12 +23,6 @@ type pathInfo struct {
 	hash string
 }
 
-type manifestInfo struct {
-	path string
-	size int64
-	hash string
-}
-
 func unixPerm(mode fs.FileMode) (perm uint32) {
 	perm = uint32(mode.Perm())
 	if mode&fs.ModeSticky != 0 {
@@ -37,11 +31,11 @@ func unixPerm(mode fs.FileMode) (perm uint32) {
 	return perm
 }
 
-// CheckDir checks the content of the target directory matches with
+// checkDir checks the content of the target directory matches with
 // the manifest.
 // This function works under the assumption the manifest is valid.
 // Files not managed by chisel are ignored.
-func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error {
+func checkDir(mfest *manifest.Manifest, rootDir string) error {
 	singlePathsByFSInode := make(map[uint64]string)
 	mfestInodeToFSInode := make(map[uint64]uint64)
 	manifestInfos := make(map[string]*pathInfo)
@@ -50,10 +44,9 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 		if pathHash == "" {
 			pathHash = path.SHA256
 		}
-		size := int64(path.Size)
 		recordedPathInfo := &pathInfo{
 			mode: path.Mode,
-			size: size,
+			size: int64(path.Size),
 			link: path.Link,
 			hash: pathHash,
 		}
@@ -88,23 +81,25 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 
 		// Collect manifests for tailored checking later.
 		// Adjust observed hash and size to still compare in a generic way.
-		if filepath.Base(path.Path) == manifestutil.DefaultFilename && size == 0 && pathHash == "" {
-			manifestInfos[path.Path] = &(*fsEntryInfo)
+		if filepath.Base(path.Path) == manifestutil.DefaultFilename && recordedPathInfo.size == 0 && recordedPathInfo.hash == "" {
+			var mfestInfo *pathInfo
+			*mfestInfo = *fsEntryInfo
+			manifestInfos[path.Path] = mfestInfo
 			fsEntryInfo.size = 0
 			fsEntryInfo.hash = ""
 		}
 
 		if recordedPathInfo.mode != fsEntryInfo.mode {
-			return fmt.Errorf("inconsistent mode at %q: recorded %+v, observed %+v", path.Path, recordedPathInfo.mode, fsEntryInfo.mode)
+			return fmt.Errorf("inconsistent mode at %q: recorded %v, observed %v", path.Path, recordedPathInfo.mode, fsEntryInfo.mode)
 		}
 		if recordedPathInfo.size != fsEntryInfo.size {
-			return fmt.Errorf("inconsistent size at %q: recorded %+v, observed %+v", path.Path, recordedPathInfo.size, fsEntryInfo.size)
+			return fmt.Errorf("inconsistent size at %q: recorded %v, observed %v", path.Path, recordedPathInfo.size, fsEntryInfo.size)
 		}
 		if recordedPathInfo.link != fsEntryInfo.link {
-			return fmt.Errorf("inconsistent link at %q: recorded %+v, observed %+v", path.Path, recordedPathInfo.link, fsEntryInfo.link)
+			return fmt.Errorf("inconsistent link at %q: recorded %v, observed %v", path.Path, recordedPathInfo.link, fsEntryInfo.link)
 		}
 		if recordedPathInfo.hash != fsEntryInfo.hash {
-			return fmt.Errorf("inconsistent hash at %q: recorded %+v, observed %+v", path.Path, recordedPathInfo.hash, fsEntryInfo.hash)
+			return fmt.Errorf("inconsistent hash at %q: recorded %v, observed %v", path.Path, recordedPathInfo.hash, fsEntryInfo.hash)
 		}
 
 		// Check hardlink
@@ -131,16 +126,16 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 				}
 			}
 		}
-
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 
 	// Check manifests
-	// Manifests are compared per schema version.
-	schemasToManifestInfo := make(map[string]manifestInfo)
-
 	// They must all be existing, readable and valid manifests.
 	// They must be consistent per schema version.
+	schemasToManifestInfo := make(map[string]pathInfo)
 	for path, info := range manifestInfos {
 		fullPath := filepath.Join(rootDir, path)
 		f, err := os.Open(fullPath)
@@ -169,14 +164,13 @@ func CheckDir(mfest *manifest.Manifest, mfestPath string, rootDir string) error 
 		}
 
 		if refInfo.size != info.size {
-			return fmt.Errorf("inconsistent manifest size for version %s at %q: recorded %+v, observed %+v", schema, path, refInfo.size, info.size)
+			return fmt.Errorf("inconsistent manifest size for version %s at %q: recorded %v, observed %v", schema, path, refInfo.size, info.size)
 		}
 		if refInfo.hash != info.hash {
-			return fmt.Errorf("inconsistent manifest hash for version %s at %q: recorded %+v, observed %+v", schema, path, refInfo.hash, info.hash)
+			return fmt.Errorf("inconsistent manifest hash for version %s at %q: recorded %v, observed %v", schema, path, refInfo.hash, info.hash)
 		}
-
 	}
-	return err
+	return nil
 }
 
 func contentHash(path string) ([]byte, error) {
