@@ -540,13 +540,13 @@ func selectPkgArchives(archives map[string]archive.Archive, selection *setup.Sel
 	return pkgArchive, nil
 }
 
-// Extract does conceptually the reverse operation as Run.
-// From a target directory, return a list of SliceKeys used to build it.
-func Extract(release *setup.Release, targetDir string) ([]setup.SliceKey, error) {
+// Inspect examines and validates the targetDir.
+// Return the list of SliceKeys used to build the targetDir.
+func Inspect(targetDir string, release *setup.Release) ([]setup.SliceKey, error) {
 	var sliceKeys []setup.SliceKey
 	manifestPaths := manifestutil.FindPathsInRelease(release)
 	if len(manifestPaths) > 0 {
-		logf("Processing root directory...")
+		logf("Inspecting root directory...")
 		mfest, mfestPath, err := extractValidManifest(targetDir, manifestPaths)
 		if err != nil {
 			return nil, err
@@ -556,8 +556,6 @@ func Extract(release *setup.Release, targetDir string) ([]setup.SliceKey, error)
 			if err != nil {
 				return nil, err
 			}
-			// Merge the slice keys used to build the existing rootfs with the ones
-			// explicitly requested.
 			mfest.IterateSlices("", func(slice *manifest.Slice) error {
 				sk, err := setup.ParseSliceKey(slice.Name)
 				if err != nil {
@@ -566,15 +564,14 @@ func Extract(release *setup.Release, targetDir string) ([]setup.SliceKey, error)
 				sliceKeys = append(sliceKeys, sk)
 				return nil
 			})
-
 		}
 	}
-
 	return sliceKeys, nil
 }
 
-// extractValidManifest extracts, validates and returns the first manifest found in a rootDir.
-// Also returns the path of the manifest.
+// extractValidManifest extracts and validates the first most recent manifest
+// found in a directory.
+// Returns the manigfest and its path.
 func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.Manifest, string, error) {
 	targetDir = filepath.Clean(targetDir)
 	if !filepath.IsAbs(targetDir) {

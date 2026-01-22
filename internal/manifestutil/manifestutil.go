@@ -355,7 +355,6 @@ func Validate(mfest *manifest.Manifest) (err error) {
 	return nil
 }
 
-
 // CompareSchemas compare two manifest schema strings
 func CompareSchemas(va, vb string) int {
 	if va == manifest.Schema && va == vb {

@@ -73,7 +73,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	extractedSliceKeys, err := slicer.Extract(release, cmd.RootDir)
+	extractedSliceKeys, err := slicer.Inspect(cmd.RootDir,release)
 	if err != nil {
 		return err
 	}
