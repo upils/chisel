@@ -552,7 +552,7 @@ func Inspect(targetDir string, release *setup.Release) ([]setup.SliceKey, error)
 			return nil, err
 		}
 		if mfest != nil {
-			err = manifestutil.CheckDir(mfest, mfestPath, targetDir)
+			err = CheckDir(mfest, mfestPath, targetDir)
 			if err != nil {
 				return nil, err
 			}
@@ -598,8 +598,7 @@ func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.M
 
 		r, err := zstd.NewReader(f)
 		if err != nil {
-			// Fail?
-			continue
+			return nil, "", err
 		}
 		defer r.Close()
 
@@ -609,7 +608,6 @@ func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.M
 		}
 		err = manifestutil.Validate(mfest)
 		if err != nil {
-			// Fail?
 			continue
 		}
 
