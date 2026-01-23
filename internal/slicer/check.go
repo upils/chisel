@@ -37,7 +37,7 @@ func unixPerm(mode fs.FileMode) (perm uint32) {
 // Files not managed by chisel are ignored.
 func checkDir(mfest *manifest.Manifest, rootDir string) error {
 	singlePathsByFSInode := make(map[uint64]string)
-	mfestInodeToFSInode := make(map[uint64]uint64)
+	fsInodeByManifestInode := make(map[uint64]uint64)
 	manifestInfos := make(map[string]*pathInfo)
 	err := mfest.IteratePaths("", func(path *manifest.Path) error {
 		pathHash := path.FinalSHA256
@@ -51,20 +51,20 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 			hash: pathHash,
 		}
 
-		fsEntryInfo := &pathInfo{}
+		fsInfo := &pathInfo{}
 		fullPath := filepath.Join(rootDir, path.Path)
 		info, err := os.Lstat(fullPath)
 		if err != nil {
 			return err
 		}
 		mode := info.Mode()
-		fsEntryInfo.mode = fmt.Sprintf("0%o", unixPerm(mode))
+		fsInfo.mode = fmt.Sprintf("0%o", unixPerm(mode))
 		ftype := mode & fs.ModeType
 		switch ftype {
 		case fs.ModeDir:
 			// Nothing to do
 		case fs.ModeSymlink:
-			fsEntryInfo.link, err = os.Readlink(fullPath)
+			fsInfo.link, err = os.Readlink(fullPath)
 			if err != nil {
 				return fmt.Errorf("cannot read symlink %q: %w", fullPath, err)
 			}
@@ -73,8 +73,8 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 			if err != nil {
 				return fmt.Errorf("cannot compute hash for %q: %w", fullPath, err)
 			}
-			fsEntryInfo.hash = hex.EncodeToString(h)
-			fsEntryInfo.size = info.Size()
+			fsInfo.hash = hex.EncodeToString(h)
+			fsInfo.size = info.Size()
 		default:
 			return fmt.Errorf("inconsistent content: %q has unrecognized type %s", fullPath, mode.String())
 		}
@@ -82,26 +82,24 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 		// Collect manifests for tailored checking later.
 		// Adjust observed hash and size to still compare in a generic way.
 		if filepath.Base(path.Path) == manifestutil.DefaultFilename && recordedPathInfo.size == 0 && recordedPathInfo.hash == "" {
-			var mfestInfo *pathInfo
-			*mfestInfo = *fsEntryInfo
-			manifestInfos[path.Path] = mfestInfo
-			fsEntryInfo.size = 0
-			fsEntryInfo.hash = ""
+			mfestInfo := *fsInfo
+			manifestInfos[path.Path] = &mfestInfo
+			fsInfo.size = 0
+			fsInfo.hash = ""
 		}
 
-		if recordedPathInfo.mode != fsEntryInfo.mode {
-			return fmt.Errorf("inconsistent mode at %q: recorded %v, observed %v", path.Path, recordedPathInfo.mode, fsEntryInfo.mode)
+		if recordedPathInfo.mode != fsInfo.mode {
+			return fmt.Errorf("inconsistent mode at %q: recorded %v, observed %v", path.Path, recordedPathInfo.mode, fsInfo.mode)
 		}
-		if recordedPathInfo.size != fsEntryInfo.size {
-			return fmt.Errorf("inconsistent size at %q: recorded %v, observed %v", path.Path, recordedPathInfo.size, fsEntryInfo.size)
+		if recordedPathInfo.size != fsInfo.size {
+			return fmt.Errorf("inconsistent size at %q: recorded %v, observed %v", path.Path, recordedPathInfo.size, fsInfo.size)
 		}
-		if recordedPathInfo.link != fsEntryInfo.link {
-			return fmt.Errorf("inconsistent link at %q: recorded %v, observed %v", path.Path, recordedPathInfo.link, fsEntryInfo.link)
+		if recordedPathInfo.link != fsInfo.link {
+			return fmt.Errorf("inconsistent link at %q: recorded %v, observed %v", path.Path, recordedPathInfo.link, fsInfo.link)
 		}
-		if recordedPathInfo.hash != fsEntryInfo.hash {
-			return fmt.Errorf("inconsistent hash at %q: recorded %v, observed %v", path.Path, recordedPathInfo.hash, fsEntryInfo.hash)
+		if recordedPathInfo.hash != fsInfo.hash {
+			return fmt.Errorf("inconsistent hash at %q: recorded %v, observed %v", path.Path, recordedPathInfo.hash, fsInfo.hash)
 		}
-
 		// Check hardlink
 		if ftype != fs.ModeDir {
 			stat, ok := info.Sys().(*syscall.Stat_t)
@@ -118,9 +116,9 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 				}
 				singlePathsByFSInode[inode] = path.Path
 			} else {
-				recordedInode, ok := mfestInodeToFSInode[path.Inode]
+				recordedInode, ok := fsInodeByManifestInode[path.Inode]
 				if !ok {
-					mfestInodeToFSInode[path.Inode] = inode
+					fsInodeByManifestInode[path.Inode] = inode
 				} else if recordedInode != inode {
 					return fmt.Errorf("inconsistent content at %q: file hardlinked to a different inode", path.Path)
 				}
@@ -135,7 +133,7 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 	// Check manifests
 	// They must all be valid manifests.
 	// They must be consistent per schema version.
-	schemaManifestInfos := make(map[string]pathInfo)
+	schemaManifestInfos := make(map[string]*pathInfo)
 	for path, info := range manifestInfos {
 		fullPath := filepath.Join(rootDir, path)
 		f, err := os.Open(fullPath)
@@ -159,7 +157,7 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 		schema := mfest.Schema()
 		refInfo, ok := schemaManifestInfos[schema]
 		if !ok {
-			schemaManifestInfos[schema] = refInfo
+			schemaManifestInfos[schema] = info
 			continue
 		}
 

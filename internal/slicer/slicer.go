@@ -3,6 +3,7 @@ package slicer
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"io/fs"
@@ -581,7 +582,12 @@ func selectValidManifest(targetDir string, manifestPaths []string) (*manifest.Ma
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
+	type manifestHash struct {
+		path string
+		hash string
+	}
 	var selected *manifest.Manifest
+	schemaManifest := make(map[string]manifestHash)
 	for _, mfestPath := range manifestPaths {
 		err := func() error {
 			mfestFullPath := path.Join(targetDir, mfestPath)
@@ -608,6 +614,17 @@ func selectValidManifest(targetDir string, manifestPaths []string) (*manifest.Ma
 			}
 
 			if selected == nil || manifestutil.CompareSchemas(mfest.Schema(), selected.Schema()) > 0 {
+				h, err := contentHash(mfestFullPath)
+				if err != nil {
+					return fmt.Errorf("cannot compute hash for %q: %w", mfestFullPath, err)
+				}
+				mfestHash := hex.EncodeToString(h)
+				refMfest, ok := schemaManifest[mfest.Schema()]
+				if !ok {
+					schemaManifest[mfest.Schema()] = manifestHash{mfestPath, mfestHash}
+				} else if refMfest.hash != mfestHash {
+					return fmt.Errorf("inconsistent manifests: %q and %q", refMfest.path, mfestPath)
+				}
 				selected = mfest
 			}
 			return nil
