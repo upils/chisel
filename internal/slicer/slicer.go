@@ -547,7 +547,7 @@ func Inspect(targetDir string, release *setup.Release) ([]setup.SliceKey, error)
 	manifestPaths := manifestutil.FindPathsInRelease(release)
 	if len(manifestPaths) > 0 {
 		logf("Inspecting root directory...")
-		mfest, err := extractValidManifest(targetDir, manifestPaths)
+		mfest, err := selectValidManifest(targetDir, manifestPaths)
 		if err != nil {
 			return nil, err
 		}
@@ -569,9 +569,9 @@ func Inspect(targetDir string, release *setup.Release) ([]setup.SliceKey, error)
 	return sliceKeys, nil
 }
 
-// extractValidManifest extracts and validates manifests found in a directory.
-// If found, returns the first manifest with the latest schema version.
-func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.Manifest, error) {
+// selectValidManifest the first valid manifest found in a directory with the
+// latest schema version.
+func selectValidManifest(targetDir string, manifestPaths []string) (*manifest.Manifest, error) {
 	targetDir = filepath.Clean(targetDir)
 	if !filepath.IsAbs(targetDir) {
 		dir, err := os.Getwd()
@@ -581,40 +581,40 @@ func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.M
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
-	var finalMfest *manifest.Manifest
+	var selected *manifest.Manifest
 	for _, mfestPath := range manifestPaths {
-		var mfest *manifest.Manifest
-		mfestFullPath := path.Join(targetDir, mfestPath)
-		f, err := os.Open(mfestFullPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
+		err := func() error {
+			mfestFullPath := path.Join(targetDir, mfestPath)
+			f, err := os.Open(mfestFullPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return nil
+				}
+				return err
 			}
-			return nil, err
-		}
-		defer f.Close()
+			defer f.Close()
+			r, err := zstd.NewReader(f)
+			if err != nil {
+				return err
+			}
+			defer r.Close()
+			mfest, err := manifest.Read(r)
+			if err != nil {
+				return nil
+			}
+			err = manifestutil.Validate(mfest)
+			if err != nil {
+				return nil
+			}
 
-		r, err := zstd.NewReader(f)
+			if selected == nil || manifestutil.CompareSchemas(mfest.Schema(), selected.Schema()) > 0 {
+				selected = mfest
+			}
+			return nil
+		}()
 		if err != nil {
 			return nil, err
 		}
-		defer r.Close()
-
-		mfest, err = manifest.Read(r)
-		if err != nil {
-			continue
-		}
-		err = manifestutil.Validate(mfest)
-		if err != nil {
-			continue
-		}
-
-		if finalMfest == nil || manifestutil.CompareSchemas(mfest.Schema(), finalMfest.Schema()) > 0 {
-			finalMfest = mfest
-		}
-		// TODO: keep all valid ones, compare them
-		// make sure they list each other
-		// TODO: sort them and pick the first one to be deterministic
 	}
-	return finalMfest, nil
+	return selected, nil
 }

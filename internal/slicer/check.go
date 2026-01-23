@@ -133,9 +133,9 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 	}
 
 	// Check manifests
-	// They must all be existing, readable and valid manifests.
+	// They must all be valid manifests.
 	// They must be consistent per schema version.
-	schemasToManifestInfo := make(map[string]pathInfo)
+	schemaManifestInfos := make(map[string]pathInfo)
 	for path, info := range manifestInfos {
 		fullPath := filepath.Join(rootDir, path)
 		f, err := os.Open(fullPath)
@@ -157,9 +157,9 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 			return err
 		}
 		schema := mfest.Schema()
-		refInfo, ok := schemasToManifestInfo[schema]
+		refInfo, ok := schemaManifestInfos[schema]
 		if !ok {
-			schemasToManifestInfo[schema] = refInfo
+			schemaManifestInfos[schema] = refInfo
 			continue
 		}
 
