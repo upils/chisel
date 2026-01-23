@@ -569,9 +569,8 @@ func Inspect(targetDir string, release *setup.Release) ([]setup.SliceKey, error)
 	return sliceKeys, nil
 }
 
-// extractValidManifest extracts and validates the first most recent manifest
-// found in a directory.
-// If found, returns the manifest.
+// extractValidManifest extracts and validates manifests found in a directory.
+// If found, returns the first manifest with the latest schema version.
 func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.Manifest, error) {
 	targetDir = filepath.Clean(targetDir)
 	if !filepath.IsAbs(targetDir) {
@@ -613,6 +612,9 @@ func extractValidManifest(targetDir string, manifestPaths []string) (*manifest.M
 		if finalMfest == nil || manifestutil.CompareSchemas(mfest.Schema(), finalMfest.Schema()) > 0 {
 			finalMfest = mfest
 		}
+		// TODO: keep all valid ones, compare them
+		// make sure they list each other
+		// TODO: sort them and pick the first one to be deterministic
 	}
 	return finalMfest, nil
 }
