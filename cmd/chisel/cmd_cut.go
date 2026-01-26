@@ -11,6 +11,7 @@ import (
 	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
+	"github.com/canonical/chisel/public/manifest"
 )
 
 var shortCutHelp = "Cut a tree with selected slices"
@@ -73,12 +74,19 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	extractedSliceKeys, err := slicer.Inspect(cmd.RootDir,release)
+	mfest, err := slicer.Inspect(cmd.RootDir, release)
 	if err != nil {
 		return err
 	}
-	if extractedSliceKeys != nil {
-		sliceKeys = append(sliceKeys, extractedSliceKeys...)
+	if mfest != nil {
+		mfest.IterateSlices("", func(slice *manifest.Slice) error {
+			sk, err := setup.ParseSliceKey(slice.Name)
+			if err != nil {
+				return err
+			}
+			sliceKeys = append(sliceKeys, sk)
+			return nil
+		})
 	}
 
 	selection, err := setup.Select(release, sliceKeys, cmd.Arch)
