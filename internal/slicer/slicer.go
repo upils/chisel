@@ -541,8 +541,8 @@ func selectPkgArchives(archives map[string]archive.Archive, selection *setup.Sel
 	return pkgArchive, nil
 }
 
-// Inspect examines and validates the targetDir.
-// Return the list of SliceKeys used to build the targetDir.
+// Inspect examines and validates the targetDir. It returns, if found and valid
+// the manifest representing the content in the targetDir.
 func Inspect(targetDir string, release *setup.Release) (*manifest.Manifest, error) {
 	var mfest *manifest.Manifest
 	manifestPaths := manifestutil.FindPathsInRelease(release)
@@ -554,7 +554,7 @@ func Inspect(targetDir string, release *setup.Release) (*manifest.Manifest, erro
 			return nil, err
 		}
 		if mfest != nil {
-			err = checkDir(mfest, targetDir)
+			err = checkRootDir(mfest, targetDir)
 			if err != nil {
 				return nil, err
 			}
@@ -563,10 +563,9 @@ func Inspect(targetDir string, release *setup.Release) (*manifest.Manifest, erro
 	return mfest, nil
 }
 
-// selectValidManifest the first valid manifest found in a directory with the
-// latest schema version.
-// A manifest is considered valid if it is consistent with others present and
-// of the same schema.
+// selectValidManifest returns, if found, a valid manifest with the latest
+// schema. Consistency with all other manifests with the same schema is verified
+// so the selection is deterministic.
 func selectValidManifest(targetDir string, manifestPaths []string) (*manifest.Manifest, error) {
 	targetDir = filepath.Clean(targetDir)
 	if !filepath.IsAbs(targetDir) {

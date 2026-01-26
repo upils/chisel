@@ -31,11 +31,10 @@ func unixPerm(mode fs.FileMode) (perm uint32) {
 	return perm
 }
 
-// checkDir checks the content of the target directory matches with
-// the manifest.
+// checkRootDir checks the content of the target directory matches with
+// the manifest. Files not managed by chisel are ignored.
 // This function works under the assumption the manifest is valid.
-// Files not managed by chisel are ignored.
-func checkDir(mfest *manifest.Manifest, rootDir string) error {
+func checkRootDir(mfest *manifest.Manifest, rootDir string) error {
 	singlePathsByFSInode := make(map[uint64]string)
 	fsInodeByManifestInode := make(map[uint64]uint64)
 	manifestInfos := make(map[string]*pathInfo)
@@ -62,13 +61,13 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 		ftype := mode & fs.ModeType
 		switch ftype {
 		case fs.ModeDir:
-			// Nothing to do
+			// Nothing to do.
 		case fs.ModeSymlink:
 			fsInfo.link, err = os.Readlink(fullPath)
 			if err != nil {
 				return fmt.Errorf("cannot read symlink %q: %w", fullPath, err)
 			}
-		case 0: // Regular
+		case 0: // Regular file.
 			h, err := contentHash(fullPath)
 			if err != nil {
 				return fmt.Errorf("cannot compute hash for %q: %w", fullPath, err)
@@ -76,11 +75,11 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 			fsInfo.hash = hex.EncodeToString(h)
 			fsInfo.size = info.Size()
 		default:
-			return fmt.Errorf("inconsistent content: %q has unrecognized type %s", fullPath, mode.String())
+			return fmt.Errorf("cannot check %q: unrecognized type %s", fullPath, mode.String())
 		}
 
-		// Collect manifests for tailored checking later.
-		// Adjust observed hash and size to still compare in a generic way.
+		// Collect manifests for tailored checking later. Adjust observed hash and
+		// size to still compare in a generic way.
 		if filepath.Base(path.Path) == manifestutil.DefaultFilename && recordedPathInfo.size == 0 && recordedPathInfo.hash == "" {
 			mfestInfo := *fsInfo
 			manifestInfos[path.Path] = &mfestInfo
@@ -100,7 +99,7 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 		if recordedPathInfo.hash != fsInfo.hash {
 			return fmt.Errorf("inconsistent hash at %q: recorded %v, observed %v", path.Path, recordedPathInfo.hash, fsInfo.hash)
 		}
-		// Check hardlink
+		// Check hardlink.
 		if ftype != fs.ModeDir {
 			stat, ok := info.Sys().(*syscall.Stat_t)
 			if !ok {
@@ -109,10 +108,10 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 			inode := stat.Ino
 
 			if path.Inode == 0 {
-				// This path must not be linked to any other
+				// This path must not be linked to any other.
 				singlePath, ok := singlePathsByFSInode[inode]
 				if ok {
-					return fmt.Errorf("inconsistent content at %q: file hardlinked to %q", path.Path, singlePath)
+					return fmt.Errorf("inconsistent content at %q: recorded no hardlink, observed hardlinked to %q", path.Path, singlePath)
 				}
 				singlePathsByFSInode[inode] = path.Path
 			} else {
@@ -130,9 +129,8 @@ func checkDir(mfest *manifest.Manifest, rootDir string) error {
 		return err
 	}
 
-	// Check manifests
-	// They must all be valid manifests.
-	// They must be consistent per schema version.
+	// Check manifests.
+	// They must all be valid manifests and be consistent per schema version.
 	schemaManifestInfos := make(map[string]*pathInfo)
 	for path, info := range manifestInfos {
 		fullPath := filepath.Join(rootDir, path)
