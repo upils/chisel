@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"maps"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -19,18 +18,25 @@ import (
 
 const DefaultFilename = "manifest.wall"
 
+func collectManifests(slice *setup.Slice, collector func(path string, slice *setup.Slice)) {
+	for path, info := range slice.Contents {
+		if info.Generate == setup.GenerateManifest {
+			dir := strings.TrimSuffix(path, "**")
+			path = filepath.Join(dir, DefaultFilename)
+			collector(path, slice)
+		}
+	}
+}
+
 // FindPaths finds the paths marked with "generate:manifest" and
 // returns a map from the manifest path to all the slices that declare it.
 func FindPaths(slices []*setup.Slice) map[string][]*setup.Slice {
 	manifestSlices := make(map[string][]*setup.Slice)
+	collector := func(path string, slice *setup.Slice) {
+		manifestSlices[path] = append(manifestSlices[path], slice)
+	}
 	for _, slice := range slices {
-		for path, info := range slice.Contents {
-			if info.Generate == setup.GenerateManifest {
-				dir := strings.TrimSuffix(path, "**")
-				path = filepath.Join(dir, DefaultFilename)
-				manifestSlices[path] = append(manifestSlices[path], slice)
-			}
-		}
+		collectManifests(slice, collector)
 	}
 	return manifestSlices
 }
@@ -38,14 +44,16 @@ func FindPaths(slices []*setup.Slice) map[string][]*setup.Slice {
 // FindPathsInRelease finds all the paths marked with "generate:manifest"
 // for the given release.
 func FindPathsInRelease(r *setup.Release) []string {
-	allSlices := []*setup.Slice{}
+	manifestPaths := make([]string,0)
+	collector := func(path string, slice *setup.Slice) {
+		manifestPaths = append(manifestPaths, path)
+	}
 	for _, pkg := range r.Packages {
 		for _, slice := range pkg.Slices {
-			allSlices = append(allSlices, slice)
+			collectManifests(slice, collector)
 		}
 	}
-	manifestMap := FindPaths(allSlices)
-	return slices.Sorted(maps.Keys(manifestMap))
+	return manifestPaths
 }
 
 type WriteOptions struct {
