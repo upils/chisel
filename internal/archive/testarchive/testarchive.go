@@ -134,7 +134,7 @@ func (r *Release) Content() []byte {
 		Version: %s
 		Codename: codename
 		Date: Thu, 21 Apr 2022 17:16:08 UTC
-		Architectures: amd64 arm64 armhf i386 ppc64el riscv64 s390x
+		Architectures: amd64 amd64v3 arm64 armhf i386 ppc64el riscv64 s390x
 		Components: main restricted universe multiverse
 		Description: Ubuntu %s
 		SHA256:

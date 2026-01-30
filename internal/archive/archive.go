@@ -203,7 +203,7 @@ func archiveURL(pro, arch string, oldRelease bool) (string, *credentials, error)
 		return ubuntuOldReleasesURL, nil, nil
 	}
 
-	if arch == "amd64" || arch == "i386" {
+	if arch == "amd64" || arch == "amd64v3" || arch == "i386" {
 		return ubuntuURL, nil, nil
 	}
 	return ubuntuPortsURL, nil, nil

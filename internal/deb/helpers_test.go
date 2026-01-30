@@ -30,6 +30,7 @@ func (s *S) TestInferArch(c *C) {
 func (s *S) TestValidateArch(c *C) {
 	c.Assert(deb.ValidateArch("i386"), IsNil)
 	c.Assert(deb.ValidateArch("amd64"), IsNil)
+	c.Assert(deb.ValidateArch("amd64v3"), IsNil)
 	c.Assert(deb.ValidateArch("armhf"), IsNil)
 	c.Assert(deb.ValidateArch("arm64"), IsNil)
 	c.Assert(deb.ValidateArch("ppc64el"), IsNil)

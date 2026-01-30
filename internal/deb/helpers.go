@@ -13,6 +13,7 @@ type archPair struct {
 var knownArchs = []archPair{
 	{"386", "i386"},
 	{"amd64", "amd64"},
+	{"amd64", "amd64v3"},
 	{"arm", "armhf"},
 	{"arm64", "arm64"},
 	{"ppc64le", "ppc64el"},
@@ -22,6 +23,10 @@ var knownArchs = []archPair{
 
 var platformGoArch = runtime.GOARCH
 
+// InferArch returns the Debian architecture name corresponding to the
+// current Go platform architecture. Note that architecture variants
+// (such as amd64v3) cannot be automatically detected since Go's runtime.GOARCH
+// does not distinguish between base architectures and their variants.
 func InferArch() (string, error) {
 	for _, arch := range knownArchs {
 		if arch.goArch == platformGoArch {
