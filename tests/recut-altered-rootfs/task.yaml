@@ -1,0 +1,24 @@
+summary: Recut detect inconssitencies in the rootfs
+
+variants:
+  - noble
+
+environment:
+  ROOTFS: rootfs
+
+execute: |
+  mkdir -p ${ROOTFS}
+
+  # TODO: remove this env var when final upgrade strategy is in place.
+  export CHISEL_RECUT_EXPERIMENTAL=1
+  # First cut generates manifest and installs slice-a.
+  chisel cut --release ./chisel-releases/ \
+    --root ${ROOTFS} \
+    base-files_slice-a base-files_manifest
+
+  echo "altered" >> ${ROOTFS}/etc/debian_version
+
+  # Second cut, only requesting slice-b.
+  chisel cut --release ./chisel-releases/ \
+    --root ${ROOTFS} \
+    base-files_slice-b 2>&1 | MATCH "error: inconsistent size at \"/etc/debian_version\""
