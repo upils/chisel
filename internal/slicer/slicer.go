@@ -156,6 +156,7 @@ func unixPerm(mode fs.FileMode) (perm uint32) {
 // root directory. Entries in the root directory not managed by Chisel are
 // ignored. This function works under the assumption the manifest is valid.
 func checkRootDir(mfest *manifest.Manifest, rootDir string) error {
+	logf("Verifying content...")
 	singlePathsByFSInode := make(map[uint64]string)
 	fsInodeByManifestInode := make(map[uint64]uint64)
 	return mfest.IteratePaths("", func(path *manifest.Path) error {
