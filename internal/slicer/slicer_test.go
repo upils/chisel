@@ -2269,7 +2269,45 @@ var slicerRecutTests = []slicerRecutTest{{
 		"/dir/other-file": "file 0644 63d5dd49 {test-package_slice2}",
 	},
 }, {
-	summary:     "Upgrade overrides modified content and mode",
+	summary:     "Upgrade error if entry is missing",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/file:
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		modifiedPath := filepath.Join(targetDir, "dir/file")
+		err := os.Remove(modifiedPath)
+		c.Assert(err, IsNil)
+	},
+	error: `lstat /tmp/.*/dir/file: no such file or directory`,
+}, {
+	summary:     "Upgrade error if mode changed",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/file:
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		modifiedPath := filepath.Join(targetDir, "dir/file")
+		err := os.Chmod(modifiedPath, 0o777)
+		c.Assert(err, IsNil)
+	},
+	error: `inconsistent mode at "/dir/file": recorded 0644, observed 0777`,
+}, {
+	summary:     "Upgrade error if size changed",
 	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
 	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
 	release: map[string]string{
@@ -2286,13 +2324,101 @@ var slicerRecutTests = []slicerRecutTest{{
 		err := os.WriteFile(modifiedPath, []byte("data2"), 0o700)
 		c.Assert(err, IsNil)
 	},
-	filesystem: map[string]string{
-		"/dir/":     "dir 0755",
-		"/dir/file": "file 0644 cc55e2ec",
+	error: `inconsistent size at "/dir/file": recorded 14, observed 5`,
+}, {
+	summary:     "Upgrade error if symlink changed",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/foo: {symlink: baz}
+		`,
 	},
-	manifestPaths: map[string]string{
-		"/dir/file": "file 0644 cc55e2ec {test-package_slice1}",
+	alterFilesystem: func(c *C, targetDir string) {
+		linkPath := filepath.Join(targetDir, "foo")
+		err := os.Remove(linkPath)
+		c.Assert(err, IsNil)
+		err = os.Symlink("bar", linkPath)
+		c.Assert(err, IsNil)
 	},
+	error: `inconsistent link at "/foo": recorded baz, observed bar`,
+}, {
+	summary:     "Upgrade error if hash changed",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/file:
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		modifiedPath := filepath.Join(targetDir, "dir/file")
+		err := os.WriteFile(modifiedPath, []byte("same length 12"), 0o644)
+		c.Assert(err, IsNil)
+	},
+	error: `inconsistent hash at "/dir/file": recorded cc55e2ecf36e40171ded57167c38e1025c99dc8f8bcdd6422368385a977ae1fe, observed edcd96e2369512b8fd0d3bf11e2e6ef12bc35ffaf0558e2a8c99019b1e9ba63d`,
+}, {
+	summary:     "Upgrade error if files now hardlinked together",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/foo: {text: data}
+						/bar: {text: data}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		barPath := filepath.Join(targetDir, "bar")
+		fooPath := filepath.Join(targetDir, "foo")
+		err := os.Remove(barPath)
+		c.Assert(err, IsNil)
+		err = os.Link(fooPath, barPath)
+		c.Assert(err, IsNil)
+
+	},
+	error: `inconsistent content at "/foo": recorded no hardlink, observed hardlinked to "/bar"`,
+}, {
+	summary:     "Upgrade error if files not hardlinked anymore",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
+	pkgs: []*testutil.TestPackage{{
+		Name: "test-package",
+		Data: testutil.MustMakeDeb([]testutil.TarEntry{
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file", "foo"),
+			testutil.Hrd(0644, "./hardlink", "./file"),
+		}),
+	}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/file:
+						/hardlink:
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		linkPath := filepath.Join(targetDir, "hardlink")
+		err := os.Remove(linkPath)
+		c.Assert(err, IsNil)
+		err = os.WriteFile(linkPath, []byte("foo"), 0o644)
+		c.Assert(err, IsNil)
+	},
+	error: `inconsistent content at "/hardlink": file hardlinked to a different inode`,
 }, {
 	summary:     "Upgrade keeps untracked files",
 	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
@@ -2403,13 +2529,8 @@ var slicerRecutTests = []slicerRecutTest{{
 		`,
 	},
 	alterFilesystem: func(c *C, targetDir string) {
-		path := filepath.Join(targetDir, "dir")
-		err := os.RemoveAll(path)
-		c.Assert(err, IsNil)
-		err = os.WriteFile(path, []byte("data"), 0o644)
-		c.Assert(err, IsNil)
 		newDirPath := filepath.Join(targetDir, "parent/permissions/")
-		err = os.MkdirAll(newDirPath, 0o755)
+		err := os.MkdirAll(newDirPath, 0755)
 		c.Assert(err, IsNil)
 	},
 	filesystem: map[string]string{
@@ -2422,40 +2543,6 @@ var slicerRecutTests = []slicerRecutTest{{
 	manifestPaths: map[string]string{
 		"/dir/file":                "file 0644 3a6eb079 {test-package_slice1}",
 		"/parent/permissions/file": "file 0755 722c14b3 {test-package_slice2}",
-	},
-}, {
-	summary:     "Upgrade removes content whith unmatching type",
-	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
-	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
-	release: map[string]string{
-		"slices/mydir/test-package.yaml": `
-			package: test-package
-			slices:
-				slice1:
-					contents:
-						/file: {text: data}
-						/a-dir/: {make: true}
-		`,
-	},
-	alterFilesystem: func(c *C, targetDir string) {
-		filePath := filepath.Join(targetDir, "file")
-		err := os.Remove(filePath)
-		c.Assert(err, IsNil)
-		err = os.Mkdir(filePath, 0o755)
-		c.Assert(err, IsNil)
-		dirPath := filepath.Join(targetDir, "a-dir")
-		err = os.Remove(dirPath)
-		c.Assert(err, IsNil)
-		err = os.WriteFile(dirPath, []byte("data"), 0o644)
-		c.Assert(err, IsNil)
-	},
-	filesystem: map[string]string{
-		"/file":   "file 0644 3a6eb079",
-		"/a-dir/": "dir 0755",
-	},
-	manifestPaths: map[string]string{
-		"/file":   "file 0644 3a6eb079 {test-package_slice1}",
-		"/a-dir/": "dir 0755 {test-package_slice1}",
 	},
 }, {
 	summary:     "Upgrade removes obsolete content but keeps non-empty directories",
