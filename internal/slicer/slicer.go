@@ -146,14 +146,14 @@ func Run(options *RunOptions) error {
 	installOpts := &optsCopy
 	installOpts.TargetDir = targetDir
 	if options.Manifest != nil {
-		rootfsPath := filepath.Join(rootWorkdirPath, "rootfs")
-		err := mkWorkdir(rootfsPath, 0o755)
+		tmpRootfsPath := filepath.Join(rootWorkdirPath, "rootfs")
+		err := mkWorkdir(tmpRootfsPath, 0o755)
 		if err != nil {
 			return err
 		}
-		installOpts.TargetDir = rootfsPath
+		installOpts.TargetDir = tmpRootfsPath
 		defer func() {
-			os.RemoveAll(rootfsPath)
+			os.RemoveAll(tmpRootfsPath)
 		}()
 	}
 
