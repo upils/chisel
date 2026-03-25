@@ -128,6 +128,11 @@ func Run(options *RunOptions) error {
 	}
 
 	// Prepare root working directory in target directory.
+	// There is an unlikely case that a package contains a file or directory
+	// with this name. That would lead to a collision when upgrading content
+	// from the temporary rootfs in the working directory to the target directory.
+	// TODO: Reserve this name. The release validation would then ensure it
+	// cannot be used in the release.
 	rootWorkdirPath := filepath.Join(targetDir, rootWorkdir)
 	err := mkWorkdir(rootWorkdirPath, 0o755)
 	if err != nil {
