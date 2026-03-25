@@ -31,7 +31,7 @@ import (
 
 const (
 	manifestMode fs.FileMode = 0o644
-	rootWorkdir                = ".chisel"
+	rootWorkdir              = ".chisel"
 )
 
 type RunOptions struct {
