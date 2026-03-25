@@ -102,15 +102,12 @@ func mkWorkdir(workdir string, mode os.FileMode) (err error) {
 		if err != nil {
 			return err
 		}
-		if fileinfo.IsDir() {
-			return os.Chmod(workdir, mode)
+		if !fileinfo.IsDir() {
+			return fmt.Errorf("existing entry at %s is not a directory", workdir)
 		}
-		// Path is not a directory, remove it.
-		err = os.Remove(workdir)
-		if err != nil {
-			return err
-		}
-		return os.Mkdir(workdir, mode)
+		// The needed mode might change between Chisel versions. Reset it to the
+		// needed mode to ensure backward compatibility.
+		return os.Chmod(workdir, mode)
 	}
 	return nil
 }

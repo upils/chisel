@@ -1980,29 +1980,6 @@ var slicerTests = []slicerTest{{
 		"/dir/file": "file 0644 cc55e2ec {test-package_third}",
 	},
 }, {
-	summary: "Run replaces regular file at .chisel path",
-	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	release: map[string]string{
-		"slices/mydir/test-package.yaml": `
-			package: test-package
-			slices:
-				myslice:
-					contents:
-						/file: {text: data1}
-		`,
-	},
-	hackopt: func(c *C, opts *slicer.RunOptions) {
-		chiselPath := filepath.Join(opts.TargetDir, ".chisel")
-		err := os.WriteFile(chiselPath, []byte("data"), 0o644)
-		c.Assert(err, IsNil)
-	},
-	filesystem: map[string]string{
-		"/file": "file 0644 5b41362b",
-	},
-	manifestPaths: map[string]string{
-		"/file": "file 0644 5b41362b {test-package_myslice}",
-	},
-}, {
 	summary: "Run fixes mode of existing .chisel directory",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
@@ -2026,7 +2003,7 @@ var slicerTests = []slicerTest{{
 		"/file": "file 0644 5b41362b {test-package_myslice}",
 	},
 }, {
-	summary: "Run replaces symlink at .chisel path",
+	summary: "Run fails when .chisel path is not a dir",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -2042,12 +2019,7 @@ var slicerTests = []slicerTest{{
 		err := os.Symlink("/nonexistent", chiselPath)
 		c.Assert(err, IsNil)
 	},
-	filesystem: map[string]string{
-		"/file": "file 0644 5b41362b",
-	},
-	manifestPaths: map[string]string{
-		"/file": "file 0644 5b41362b {test-package_myslice}",
-	},
+	error: `cannot create working directory: existing entry at .*/\.chisel is not a directory`,
 }, {
 	summary: "Run keeps non-empty .chisel directory",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
