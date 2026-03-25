@@ -1979,6 +1979,119 @@ var slicerTests = []slicerTest{{
 	manifestPaths: map[string]string{
 		"/dir/file": "file 0644 cc55e2ec {test-package_third}",
 	},
+}, {
+	summary: "Run replaces regular file at .chisel path",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	hackopt: func(c *C, opts *slicer.RunOptions) {
+		chiselPath := filepath.Join(opts.TargetDir, ".chisel")
+		err := os.WriteFile(chiselPath, []byte("data"), 0o644)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/file": "file 0644 5b41362b",
+	},
+	manifestPaths: map[string]string{
+		"/file": "file 0644 5b41362b {test-package_myslice}",
+	},
+}, {
+	summary: "Run fixes mode of existing .chisel directory",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	hackopt: func(c *C, opts *slicer.RunOptions) {
+		chiselPath := filepath.Join(opts.TargetDir, ".chisel")
+		err := os.Mkdir(chiselPath, 0o700)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/file": "file 0644 5b41362b",
+	},
+	manifestPaths: map[string]string{
+		"/file": "file 0644 5b41362b {test-package_myslice}",
+	},
+}, {
+	summary: "Run replaces symlink at .chisel path",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	hackopt: func(c *C, opts *slicer.RunOptions) {
+		chiselPath := filepath.Join(opts.TargetDir, ".chisel")
+		err := os.Symlink("/nonexistent", chiselPath)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/file": "file 0644 5b41362b",
+	},
+	manifestPaths: map[string]string{
+		"/file": "file 0644 5b41362b {test-package_myslice}",
+	},
+}, {
+	summary: "Run keeps non-empty .chisel directory",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	hackopt: func(c *C, opts *slicer.RunOptions) {
+		chiselPath := filepath.Join(opts.TargetDir, ".chisel")
+		err := os.Mkdir(chiselPath, 0o755)
+		c.Assert(err, IsNil)
+		err = os.WriteFile(filepath.Join(chiselPath, "keep"), []byte("keep"), 0o644)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/.chisel/":     "dir 0755",
+		"/.chisel/keep": "file 0644 6ca7ea2f",
+		"/file":         "file 0644 5b41362b",
+	},
+	manifestPaths: map[string]string{
+		"/file": "file 0644 5b41362b {test-package_myslice}",
+	},
+}, {
+	summary: "Run fails when target dir is not writable",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	hackopt: func(c *C, opts *slicer.RunOptions) {
+		err := os.Chmod(opts.TargetDir, 0o555)
+		c.Assert(err, IsNil)
+	},
+	error: `cannot create working directory: mkdir .*/\.chisel: permission denied`,
 }}
 
 func (s *S) TestRun(c *C) {
