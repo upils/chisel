@@ -155,9 +155,10 @@ func (cmd *cmdCut) Execute(args []string) error {
 	}
 
 	err = slicer.Run(&slicer.RunOptions{
-		Selection: selection,
-		Archives:  archives,
-		TargetDir: targetDir,
+		Selection:        selection,
+		Archives:         archives,
+		TargetDir:        targetDir,
+		PreviousManifest: mfest,
 	})
 	return err
 }
