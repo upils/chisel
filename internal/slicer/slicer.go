@@ -40,19 +40,6 @@ type RunOptions struct {
 	Release          *setup.Release
 }
 
-type CutOptions struct {
-	Selection *setup.Selection
-	Archives  map[string]archive.Archive
-	TargetDir string
-}
-
-type MergeOptions struct {
-	TargetDir        string
-	WorkDir          string
-	PreviousManifest *manifest.Manifest
-	Release          *setup.Release
-}
-
 type pathData struct {
 	until    setup.PathUntil
 	mutable  bool
@@ -108,45 +95,36 @@ func Run(options *RunOptions) error {
 		return fmt.Errorf("internal error: cannot use a relative target directory %s", targetDir)
 	}
 
-	cutOpts := &CutOptions{
-		Selection: options.Selection,
-		Archives:  options.Archives,
-		TargetDir: options.TargetDir,
-	}
+	cutTargetDir := options.TargetDir
 	if options.PreviousManifest != nil {
-		cutOpts.TargetDir = options.WorkDir
+		cutTargetDir = options.WorkDir
 	}
-	err := cut(cutOpts)
+	err := cut(cutTargetDir, options.Selection, options.Archives)
 	if err != nil {
 		return err
 	}
 
 	if options.PreviousManifest != nil {
-		return merge(&MergeOptions{
-			TargetDir:        options.TargetDir,
-			WorkDir:          options.WorkDir,
-			PreviousManifest: options.PreviousManifest,
-			Release:          options.Release,
-		})
+		return merge(options.TargetDir, options.WorkDir, options.PreviousManifest, options.Release)
 	}
 
 	return nil
 }
 
-func cut(options *CutOptions) error {
-	pkgArchive, err := selectPkgArchives(options.Archives, options.Selection)
+func cut(targetDir string, selection *setup.Selection, archives map[string]archive.Archive) error {
+	pkgArchive, err := selectPkgArchives(archives, selection)
 	if err != nil {
 		return err
 	}
 
-	prefers, err := options.Selection.Prefers()
+	prefers, err := selection.Prefers()
 	if err != nil {
 		return err
 	}
 
 	// Build information to process the selection.
 	extract := make(map[string]map[string][]deb.ExtractInfo)
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		extractPackage := extract[slice.Package]
 		if extractPackage == nil {
 			extractPackage = make(map[string][]deb.ExtractInfo)
@@ -192,7 +170,7 @@ func cut(options *CutOptions) error {
 	// Fetch all packages, using the selection order.
 	packages := make(map[string]io.ReadSeekCloser)
 	var pkgInfos []*archive.PackageInfo
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		if packages[slice.Package] != nil {
 			continue
 		}
@@ -209,7 +187,7 @@ func cut(options *CutOptions) error {
 	// listed as until: mutate in all the slices that reference them.
 	knownPaths := map[string]pathData{}
 	addKnownPath(knownPaths, "/", pathData{})
-	report, err := manifestutil.NewReport(options.TargetDir)
+	report, err := manifestutil.NewReport(targetDir)
 	if err != nil {
 		return fmt.Errorf("internal error: cannot create report: %w", err)
 	}
@@ -227,7 +205,7 @@ func cut(options *CutOptions) error {
 			return err
 		}
 
-		relPath := filepath.Clean("/" + strings.TrimPrefix(o.Path, options.TargetDir))
+		relPath := filepath.Clean("/" + strings.TrimPrefix(o.Path, targetDir))
 		if o.Mode.IsDir() {
 			relPath = relPath + "/"
 		}
@@ -277,7 +255,7 @@ func cut(options *CutOptions) error {
 	}
 
 	// Extract all packages, also using the selection order.
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		reader := packages[slice.Package]
 		if reader == nil {
 			continue
@@ -285,7 +263,7 @@ func cut(options *CutOptions) error {
 		err := deb.Extract(reader, &deb.ExtractOptions{
 			Package:   slice.Package,
 			Extract:   extract[slice.Package],
-			TargetDir: options.TargetDir,
+			TargetDir: targetDir,
 			Create:    create,
 		})
 		reader.Close()
@@ -312,7 +290,7 @@ func cut(options *CutOptions) error {
 	// First group them by their relative path. Then create them and attribute
 	// them to the appropriate slices.
 	relPaths := map[string][]*setup.Slice{}
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		arch := pkgArchive[slice.Package].Options().Arch
 		for relPath, pathInfo := range slice.Contents {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
@@ -347,7 +325,7 @@ func cut(options *CutOptions) error {
 			mutable: pathInfo.Mutable,
 		}
 		addKnownPath(knownPaths, relPath, data)
-		entry, err := createFile(options.TargetDir, relPath, pathInfo)
+		entry, err := createFile(targetDir, relPath, pathInfo)
 		if err != nil {
 			return err
 		}
@@ -367,12 +345,12 @@ func cut(options *CutOptions) error {
 	// dependencies must run before dependents.
 	checker := contentChecker{knownPaths}
 	content := &scripts.ContentValue{
-		RootDir:    options.TargetDir,
+		RootDir:    targetDir,
 		CheckWrite: checker.checkMutable,
 		CheckRead:  checker.checkKnown,
 		OnWrite:    report.Mutate,
 	}
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		opts := scripts.RunOptions{
 			Label:  "mutate",
 			Script: slice.Scripts.Mutate,
@@ -386,21 +364,21 @@ func cut(options *CutOptions) error {
 		}
 	}
 
-	err = removeAfterMutate(options.TargetDir, knownPaths)
+	err = removeAfterMutate(targetDir, knownPaths)
 	if err != nil {
 		return err
 	}
 
-	return generateManifests(options.TargetDir, options.Selection, report, pkgInfos)
+	return generateManifests(targetDir, selection, report, pkgInfos)
 }
 
 // merge applies the content from the tempDir to the targetDir. This
 // process assumes the targetDir was verified with prevManifest, and so
 // prevManifest is an accurate representation of files and directories
 // previously installed by Chisel in the targetDir.
-func merge(options *MergeOptions) error {
-	logf("Merging cut in %s...", options.TargetDir)
-	newManifest, err := SelectValidManifest(options.WorkDir, options.Release)
+func merge(targetDir string, workDir string, prevManifest *manifest.Manifest, release *setup.Release) error {
+	logf("Merging cut in %s...", targetDir)
+	newManifest, err := SelectValidManifest(workDir, release)
 	if err != nil {
 		return fmt.Errorf("internal error: cannot select manifest from working directory: %s", err)
 	}
@@ -416,7 +394,7 @@ func merge(options *MergeOptions) error {
 	}
 	missingPaths := make([]string, 0, len(entries))
 	newEntries := maps.Clone(entries)
-	err = options.PreviousManifest.IteratePaths("", func(path *manifest.Path) error {
+	err = prevManifest.IteratePaths("", func(path *manifest.Path) error {
 		_, ok := entries[path.Path]
 		if ok {
 			delete(newEntries, path.Path)
@@ -433,7 +411,7 @@ func merge(options *MergeOptions) error {
 	// Existing directories are accepted.
 	newPaths := slices.Sorted(maps.Keys(newEntries))
 	for _, path := range newPaths {
-		absPath := filepath.Clean(filepath.Join(options.TargetDir, path))
+		absPath := filepath.Clean(filepath.Join(targetDir, path))
 		fileInfo, err := os.Lstat(absPath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -461,7 +439,7 @@ func merge(options *MergeOptions) error {
 	// them. Any ENOTEMPTY error encountered means user content is in the directory
 	// and Chisel does not manage it anymore.
 	for _, path := range missingPaths {
-		absPath := filepath.Clean(filepath.Join(options.TargetDir, path))
+		absPath := filepath.Clean(filepath.Join(targetDir, path))
 		err = os.Remove(absPath)
 		if err != nil && !os.IsNotExist(err) {
 			if errors.Is(err, syscall.ENOTEMPTY) {
@@ -476,7 +454,7 @@ func merge(options *MergeOptions) error {
 	paths := slices.Sorted(maps.Keys(entries))
 	for _, path := range paths {
 		var prevEntry *manifest.Path
-		err := options.PreviousManifest.IteratePaths(path, func(prevPath *manifest.Path) error {
+		err := prevManifest.IteratePaths(path, func(prevPath *manifest.Path) error {
 			if path == prevPath.Path {
 				prevEntry = prevPath
 			}
@@ -511,7 +489,7 @@ func merge(options *MergeOptions) error {
 		// guarantees as a normal cut.
 		// Even if unlikely, this operation can fail if a user file has the
 		// same path as one of the implicit parent directory replicated here.
-		if err := replicateParentDirs(options.WorkDir, options.TargetDir, path); err != nil {
+		if err := replicateParentDirs(workDir, targetDir, path); err != nil {
 			return fmt.Errorf("cannot create parent directory for %q: %s", path, err)
 		}
 		// The removal done at step 3 ensures that if the destination path exists
@@ -522,8 +500,8 @@ func merge(options *MergeOptions) error {
 		// removed at step 3. This content must not be deleted;
 		// - Content was modified in the rootfs between its verification and this
 		//   step. This process does not try to solve this case.
-		srcPath := filepath.Clean(filepath.Join(options.WorkDir, path))
-		dstPath := filepath.Clean(filepath.Join(options.TargetDir, path))
+		srcPath := filepath.Clean(filepath.Join(workDir, path))
+		dstPath := filepath.Clean(filepath.Join(targetDir, path))
 		if strings.HasSuffix(path, "/") {
 			permissions, err := strconv.ParseUint(entry.Mode, 8, 32)
 			if err != nil {

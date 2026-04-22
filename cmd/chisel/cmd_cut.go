@@ -166,7 +166,6 @@ func (cmd *cmdCut) Execute(args []string) error {
 		if err != nil {
 			return fmt.Errorf("cannot create temporary working directory: %w", err)
 		}
-		// targetDir = tmpWorkDir
 		defer func() {
 			os.RemoveAll(tmpWorkDir)
 		}()
