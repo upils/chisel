@@ -2522,6 +2522,7 @@ func (s *S) TestRunRecut(c *C) {
 			Selection: selection,
 			Archives:  archives,
 			TargetDir: targetDir,
+			Release: release,
 		}
 		// First run.
 		err = slicer.Run(&options)
@@ -2544,6 +2545,7 @@ func (s *S) TestRunRecut(c *C) {
 			Archives:         archives,
 			TargetDir:        targetDir,
 			PreviousManifest: mfest,
+			Release: release,
 		}
 		// Second run.
 		err = slicer.Run(&options)

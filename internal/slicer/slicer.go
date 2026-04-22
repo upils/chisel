@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -35,6 +36,7 @@ type RunOptions struct {
 	Archives         map[string]archive.Archive
 	TargetDir        string
 	PreviousManifest *manifest.Manifest
+	Release          *setup.Release
 }
 
 type pathData struct {
@@ -112,30 +114,31 @@ func Run(options *RunOptions) error {
 		}()
 	}
 
-	report, err := cut(cutOpts)
+	err := cut(cutOpts)
 	if err != nil {
 		return err
 	}
 
 	if options.PreviousManifest != nil {
-		err = applyRecut(targetDir, cutOpts.TargetDir, report, options.PreviousManifest)
-		if err != nil {
-			return err
-		}
+		return merge(targetDir, cutOpts.TargetDir, options.PreviousManifest, options.Release)
 	}
 
 	return nil
 }
 
-func cut(options *RunOptions) (*manifestutil.Report, error) {
+func cut(options *RunOptions) error {
+	if !filepath.IsAbs(options.TargetDir) {
+		return fmt.Errorf("internal error: cannot operate on a relative target directory")
+	}
+
 	pkgArchive, err := selectPkgArchives(options.Archives, options.Selection)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	prefers, err := options.Selection.Prefers()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Build information to process the selection.
@@ -192,7 +195,7 @@ func cut(options *RunOptions) (*manifestutil.Report, error) {
 		}
 		reader, info, err := pkgArchive[slice.Package].Fetch(slice.Package)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer reader.Close()
 		packages[slice.Package] = reader
@@ -205,7 +208,7 @@ func cut(options *RunOptions) (*manifestutil.Report, error) {
 	addKnownPath(knownPaths, "/", pathData{})
 	report, err := manifestutil.NewReport(options.TargetDir)
 	if err != nil {
-		return nil, fmt.Errorf("internal error: cannot create report: %w", err)
+		return fmt.Errorf("internal error: cannot create report: %w", err)
 	}
 
 	// Record directories which are created but where not listed in the slice
@@ -285,7 +288,7 @@ func cut(options *RunOptions) (*manifestutil.Report, error) {
 		reader.Close()
 		packages[slice.Package] = nil
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -343,7 +346,7 @@ func cut(options *RunOptions) (*manifestutil.Report, error) {
 		addKnownPath(knownPaths, relPath, data)
 		entry, err := createFile(options.TargetDir, relPath, pathInfo)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// Do not add paths with "until: mutate".
@@ -351,7 +354,7 @@ func cut(options *RunOptions) (*manifestutil.Report, error) {
 			for _, slice := range slices {
 				err = report.Add(slice, entry)
 				if err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
@@ -376,33 +379,49 @@ func cut(options *RunOptions) (*manifestutil.Report, error) {
 		}
 		err := scripts.Run(&opts)
 		if err != nil {
-			return nil, fmt.Errorf("slice %s: %w", slice, err)
+			return fmt.Errorf("slice %s: %w", slice, err)
 		}
 	}
 
 	err = removeAfterMutate(options.TargetDir, knownPaths)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	err = generateManifests(options.TargetDir, options.Selection, report, pkgInfos)
-	if err != nil {
-		return nil, err
-	}
-
-	return report, nil
+	return generateManifests(options.TargetDir, options.Selection, report, pkgInfos)
 }
 
-// applyRecut applies the content from the tempDir to the targetDir. This
+// merge applies the content from the tempDir to the targetDir. This
 // process assumes the targetDir was verified with prevManifest, and so
 // prevManifest is an accurate representation of files and directories
 // previously installed by Chisel in the targetDir.
-func applyRecut(targetDir string, tempDir string, report *manifestutil.Report, prevManifest *manifest.Manifest) error {
-	logf("Applying cut on %s...", targetDir)
-	missingPaths := make([]string, 0, len(report.Entries))
-	newEntries := maps.Clone(report.Entries)
-	err := prevManifest.IteratePaths("", func(path *manifest.Path) error {
-		_, ok := report.Entries[path.Path]
+func merge(targetDir string, tempDir string, prevManifest *manifest.Manifest, release *setup.Release) error {
+	logf("Merging cut in %s...", targetDir)
+	if !filepath.IsAbs(targetDir) {
+		return fmt.Errorf("internal error: cannot operate on a relative target directory %s", targetDir)
+	}
+	if !filepath.IsAbs(tempDir) {
+		return fmt.Errorf("internal error: cannot operate on a relative working directory %s", tempDir)
+	}
+
+	newManifest, err := SelectValidManifest(tempDir, release)
+	if err != nil {
+		return fmt.Errorf("internal error: cannot select manifest from working directory: %s", err)
+	}
+
+	// Step 1: Identify new and missing entries.
+	entries := make(map[string]*manifest.Path)
+	err = newManifest.IteratePaths("", func(path *manifest.Path) error {
+		entries[path.Path] = path
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	missingPaths := make([]string, 0, len(entries))
+	newEntries := maps.Clone(entries)
+	err = prevManifest.IteratePaths("", func(path *manifest.Path) error {
+		_, ok := entries[path.Path]
 		if ok {
 			delete(newEntries, path.Path)
 		} else {
@@ -414,11 +433,12 @@ func applyRecut(targetDir string, tempDir string, report *manifestutil.Report, p
 		return err
 	}
 
-	// Step 1: Verify no new path will collide with user content.
+	// Step 2: Verify no new path will collide with user content.
+	// Existing directories are accepted.
 	newPaths := slices.Sorted(maps.Keys(newEntries))
 	for _, path := range newPaths {
-		dstPath := filepath.Clean(filepath.Join(targetDir, path))
-		fileInfo, err := os.Lstat(dstPath)
+		absPath := filepath.Clean(filepath.Join(targetDir, path))
+		fileInfo, err := os.Lstat(absPath)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -430,8 +450,8 @@ func applyRecut(targetDir string, tempDir string, report *manifestutil.Report, p
 		}
 	}
 
-	// Step 2: Remove content removed from packages/slices.
-	// An entry listed in the previous manifest but missing from the new report
+	// Step 3: Remove content removed from packages/slices.
+	// An entry listed in the previous manifest but missing from the new one
 	// means it is not part of the package/slice anymore, so remove it.
 	// Doing the removing before updating content prevents from collisions in the
 	// next step if a path changed type in the package (ex. a dir became a file).
@@ -439,24 +459,25 @@ func applyRecut(targetDir string, tempDir string, report *manifestutil.Report, p
 	// the manifest due to the trailing slash on directories.
 	// These files/directories are safe to remove because the targetDir
 	// verification ensured they were unmodified.
-	sort.Sort(sort.Reverse(sort.StringSlice(missingPaths)))
+	slices.Sort(missingPaths)
+	slices.Reverse(missingPaths)
 	// Go through the list in reverse order to empty directories before removing
 	// them. Any ENOTEMPTY error encountered means user content is in the directory
 	// and Chisel does not manage it anymore.
-	for _, relPath := range missingPaths {
-		path := filepath.Clean(filepath.Join(targetDir, relPath))
-		err = os.Remove(path)
+	for _, path := range missingPaths {
+		absPath := filepath.Clean(filepath.Join(targetDir, path))
+		err = os.Remove(absPath)
 		if err != nil && !os.IsNotExist(err) {
 			if errors.Is(err, syscall.ENOTEMPTY) {
-				logf("Keep %s as not empty after package content removal", relPath)
+				logf("Keep %s as not empty after package content removal", path)
 				continue
 			}
 			return err
 		}
 	}
 
-	// Step 3: Apply tmpDir content to targetDir.
-	paths := slices.Sorted(maps.Keys(report.Entries))
+	// Step 4: Apply tempDir content to targetDir.
+	paths := slices.Sorted(maps.Keys(entries))
 	for _, path := range paths {
 		var prevEntry *manifest.Path
 		err := prevManifest.IteratePaths(path, func(prevPath *manifest.Path) error {
@@ -468,14 +489,13 @@ func applyRecut(targetDir string, tempDir string, report *manifestutil.Report, p
 		if err != nil {
 			return err
 		}
-		entry := report.Entries[path]
+		entry := entries[path]
 		if prevEntry != nil {
-			entryMode := fmt.Sprintf("0%o", unixPerm(entry.Mode))
 			// Skip the entry if both previous and new one are identical, except for
 			// manifests. No Size/SHA256/FinalSH2A56 are recorded for manifests, so make
 			// sure they are NOT skipped.
-			if prevEntry.Mode == entryMode &&
-				int(prevEntry.Size) == entry.Size &&
+			if prevEntry.Mode == entry.Mode &&
+				prevEntry.Size == entry.Size &&
 				prevEntry.Link == entry.Link &&
 				prevEntry.SHA256 == entry.SHA256 &&
 				prevEntry.FinalSHA256 == entry.FinalSHA256 &&
@@ -490,55 +510,49 @@ func applyRecut(targetDir string, tempDir string, report *manifestutil.Report, p
 		}
 		// When extracting the content, a great care is taken to create parent
 		// directories respecting the tarball permissions. However this approach
-		// can create implicit parents, not recorded in the report. Make sure
+		// can create implicit parents, not recorded in the manifest. Make sure
 		// to replicate these directories in the targetDir to sustain the same
 		// guarantees as a normal cut.
-		// Even if unlikely, this can operation can fail if a user file has the
+		// Even if unlikely, this operation can fail if a user file has the
 		// same path as one of the implicit parent directory replicated here.
 		if err := replicateParentDirs(tempDir, targetDir, path); err != nil {
 			return fmt.Errorf("cannot create parent directory for %q: %s", path, err)
 		}
-		// The removal done at step 2 ensures that if the destination path exists
+		// The removal done at step 3 ensures that if the destination path exists
 		// it is of the same type (dir or file/symlink) as the source. So any error
 		// here is considered a failure because it can only mean one of these things:
 		// - An OS error happened, we cannot do anything about it;
 		// - There is a collision with a directory containing user content and not
-		// removed at step 1. This content must not be deleted;
+		// removed at step 3. This content must not be deleted;
 		// - Content was modified in the rootfs between its verification and this
 		//   step. This process does not try to solve this case.
 		srcPath := filepath.Clean(filepath.Join(tempDir, path))
 		dstPath := filepath.Clean(filepath.Join(targetDir, path))
-		switch entry.Mode & fs.ModeType {
-		case 0, fs.ModeSymlink:
-			err = os.Rename(srcPath, dstPath)
+		if strings.HasSuffix(path, "/") {
+			permissions, err := strconv.ParseUint(entry.Mode, 8, 32)
 			if err != nil {
-				err = fmt.Errorf("cannot move file at %q: %s", path, err)
+				return fmt.Errorf("cannot parse mode %q: %w", entry.Mode, err)
 			}
-		case fs.ModeDir:
-			mkdirErr := os.Mkdir(dstPath, entry.Mode)
+			mode := fs.FileMode(permissions)
+			mkdirErr := os.Mkdir(dstPath, mode)
 			if mkdirErr != nil {
 				if os.IsExist(mkdirErr) {
-					err = os.Chmod(dstPath, entry.Mode)
+					err = os.Chmod(dstPath, mode)
 				} else {
 					err = mkdirErr
 				}
+				if err != nil {
+					return err
+				}
 			}
-		default:
-			err = fmt.Errorf("unsupported file type: %s", path)
-		}
-		if err != nil {
-			return err
+		} else {
+			err = os.Rename(srcPath, dstPath)
+			if err != nil {
+				return fmt.Errorf("cannot move file at %q: %s", path, err)
+			}
 		}
 	}
 	return nil
-}
-
-func unixPerm(mode fs.FileMode) (perm uint32) {
-	perm = uint32(mode.Perm())
-	if mode&fs.ModeSticky != 0 {
-		perm |= 0o1000
-	}
-	return perm
 }
 
 // replicateParentDirs replicates the parent directories of targetPath in dstRoot.

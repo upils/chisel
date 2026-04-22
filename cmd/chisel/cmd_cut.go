@@ -159,6 +159,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 		Archives:         archives,
 		TargetDir:        targetDir,
 		PreviousManifest: mfest,
+		Release:          release,
 	})
 	return err
 }
