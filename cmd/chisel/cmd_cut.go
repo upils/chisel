@@ -162,7 +162,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 	// cannot be used in the release.
 	stateDir, err := slicer.MkStateDir(targetDir, 0o755)
 	if err != nil {
-		return fmt.Errorf("cannot create temporary working directory: %w", err)
+		return fmt.Errorf("cannot create temporary working directory: %s", err)
 	}
 	defer func() {
 		// The state directory must only be removed if empty. This call will do so

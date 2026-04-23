@@ -10,9 +10,8 @@ const stateDir = ".chisel"
 
 // MkStateDir ensures the state dir exists under the given directory, with the proper
 // permissions.
-func MkStateDir(targetDir string, mode os.FileMode) (string, error) {
-	var err error
-	dir := filepath.Join(targetDir, stateDir)
+func MkStateDir(targetDir string, mode os.FileMode) (dir string, err error) {
+	dir = filepath.Join(targetDir, stateDir)
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot create state directory: %w", err)
