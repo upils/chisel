@@ -2109,6 +2109,7 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 				Selection: selection,
 				Archives:  archives,
 				TargetDir: c.MkDir(),
+				StateDir:  c.MkDir(),
 			}
 			if test.hackopt != nil {
 				test.hackopt(c, &options)
@@ -2518,11 +2519,13 @@ func (s *S) TestRunRecut(c *C) {
 		}
 
 		targetDir := c.MkDir()
+		stateDir :=  c.MkDir()
 		options := slicer.RunOptions{
 			Selection: selection,
 			Archives:  archives,
 			TargetDir: targetDir,
-			Release: release,
+			StateDir:  stateDir,
+			Release:   release,
 		}
 		// First run.
 		err = slicer.Run(&options)
@@ -2544,8 +2547,9 @@ func (s *S) TestRunRecut(c *C) {
 			Selection:        selection,
 			Archives:         archives,
 			TargetDir:        targetDir,
+			StateDir:         stateDir,
 			PreviousManifest: mfest,
-			Release: release,
+			Release:          release,
 		}
 		// Second run.
 		err = slicer.Run(&options)
