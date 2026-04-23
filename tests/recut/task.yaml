@@ -13,7 +13,7 @@ execute: |
 
   mkdir -p ${ROOTFS}
 
-  # TODO: remove this env var when final upgrade strategy is in place.
+  # TODO: remove this env var once the rootfs verification is in place.
   export CHISEL_RECUT_EXPERIMENTAL=1
   # First cut generates manifest and installs slice-a.
   chisel cut --release ./chisel-releases/ \

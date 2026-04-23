@@ -2519,7 +2519,7 @@ func (s *S) TestRunRecut(c *C) {
 		}
 
 		targetDir := c.MkDir()
-		stateDir :=  c.MkDir()
+		stateDir := c.MkDir()
 		options := slicer.RunOptions{
 			Selection: selection,
 			Archives:  archives,

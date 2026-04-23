@@ -10,7 +10,7 @@ environment:
 execute: |
   mkdir -p ${ROOTFS} ${ROOTFS_RECUT}
 
-  # TODO: remove this env var when final upgrade strategy is in place.
+  # TODO: Remove this env var once the rootfs verification is in place.
   export CHISEL_RECUT_EXPERIMENTAL=1
 
   # First cut single cut
