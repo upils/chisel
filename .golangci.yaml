@@ -46,6 +46,10 @@ linters:
           - staticcheck
         path: ^.*.go$
         text: '"golang.org/x/crypto/openpgp/\w+" is deprecated'
+        # Only accepted exclusion for ST1005 as some errors are used as
+        # messages displayed to the user, so they need proper punctuation.
+        # This exclusion cannot be more granular, so it might lead to
+        # missing true positives.
       - linters:
           - staticcheck
         path: cmd/chisel/.*.go
@@ -54,6 +58,8 @@ linters:
           - staticcheck
         path: ^.*/log.go$
         text: "ST1003:"
+        # No further exclusions must be added on rule ST1012.
+        # TODO: when possible, rename errors to removed these exclusions.
       - linters:
           - staticcheck
         path: internal/cache/cache.go
