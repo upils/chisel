@@ -77,7 +77,6 @@ func (cmd *cmdCut) Execute(args []string) error {
 	}
 
 	var mfest *manifest.Manifest
-	var noManifestErr *slicer.NoManifestError
 	// TODO: Remove this gating once the final upgrading strategy is in place.
 	if os.Getenv("CHISEL_RECUT_EXPERIMENTAL") != "" {
 		mfest, err = slicer.SelectValidManifest(cmd.RootDir, release)
@@ -93,7 +92,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 			if err != nil {
 				return err
 			}
-		} else if !errors.As(err, &noManifestErr) {
+		} else if !errors.Is(err, slicer.ErrNoManifest) {
 			return err
 		}
 	}

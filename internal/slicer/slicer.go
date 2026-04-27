@@ -542,13 +542,7 @@ func selectPkgArchives(archives map[string]archive.Archive, selection *setup.Sel
 	return pkgArchive, nil
 }
 
-type NoManifestError struct {
-	message string
-}
-
-func (e *NoManifestError) Error() string {
-	return e.message
-}
+var ErrNoManifest = errors.New("cannot find valid manifest file")
 
 // SelectValidManifest looks in the targetDir for manifests declared in the
 // release, reads and validates those found. The selection ensures that all
@@ -558,15 +552,9 @@ func (e *NoManifestError) Error() string {
 // if it is a zstd file, readable by manifest.Read (with a known schema
 // version) and successfully validated by manifestutil.Validate.
 //
-// Not finding any manifest (valid or not) means the targetDir cannot be
-// considered as previously produced by Chisel for the given release.
-//
 // Finding only manifests with unknown schema version means the targetDir may
 // have been produced by Chisel, but possibly by a future/incompatible version.
 // Chisel cannot safely proceed and so errors out.
-//
-// Finding multiple manifests, with at least one valid means Chisel can proceed,
-// ignoring unknown ones.
 func SelectValidManifest(targetDir string, release *setup.Release) (*manifest.Manifest, error) {
 	targetDir = filepath.Clean(targetDir)
 	if !filepath.IsAbs(targetDir) {
@@ -578,7 +566,7 @@ func SelectValidManifest(targetDir string, release *setup.Release) (*manifest.Ma
 	}
 	manifestPaths := manifestutil.FindPathsInRelease(release)
 	if len(manifestPaths) == 0 {
-		return nil, &NoManifestError{message: "no manifest generated for the release"}
+		return nil, ErrNoManifest
 	}
 
 	var selected *manifest.Manifest
@@ -628,9 +616,9 @@ func SelectValidManifest(targetDir string, release *setup.Release) (*manifest.Ma
 	}
 	if selected == nil {
 		if foundUnknownSchema {
-			return nil, fmt.Errorf("cannot select a manifest: all manifests found use unknown schema")
+			return nil, fmt.Errorf("cannot select a manifest: schema version is unknown")
 		} else {
-			return nil, &NoManifestError{message: "no valid manifest found in directory"}
+			return nil, ErrNoManifest
 		}
 	}
 	return selected, nil
