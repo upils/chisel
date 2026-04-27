@@ -575,36 +575,18 @@ func SelectValidManifest(targetDir string, release *setup.Release) (*manifest.Ma
 	foundUnknownSchema := false
 	for _, manifestPath := range manifestPaths {
 		manifestFullPath := filepath.Join(targetDir, manifestPath)
-		f, err := os.Open(manifestFullPath)
+		mfest, manifestHash, err := tryLoadManifest(manifestFullPath)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return nil, err
-		}
-		defer f.Close()
-		r, err := zstd.NewReader(f)
-		if err != nil {
-			return nil, err
-		}
-		defer r.Close()
-		mfest, err := manifest.Read(r)
-		var unknownSchemaError *manifest.UnknownSchemaError
-		if err != nil {
+			var unknownSchemaError *manifest.UnknownSchemaError
 			if errors.As(err, &unknownSchemaError) {
 				foundUnknownSchema = true
 				// Ignore manifests with unknown (potentially future) schema versions.
 				continue
 			}
 			return nil, err
-		}
-		err = manifestutil.Validate(mfest)
-		if err != nil {
-			return nil, err
-		}
-		manifestHash, err := contentHash(manifestFullPath)
-		if err != nil {
-			return nil, fmt.Errorf("cannot compute hash for %q: %s", manifestFullPath, err)
 		}
 		if selected == nil {
 			selected = mfest
@@ -622,6 +604,32 @@ func SelectValidManifest(targetDir string, release *setup.Release) (*manifest.Ma
 		}
 	}
 	return selected, nil
+}
+
+func tryLoadManifest(manifestFullPath string) (*manifest.Manifest, string, error) {
+	f, err := os.Open(manifestFullPath)
+	if err != nil {
+		return nil, "", err
+	}
+	defer f.Close()
+	r, err := zstd.NewReader(f)
+	if err != nil {
+		return nil, "", err
+	}
+	defer r.Close()
+	mfest, err := manifest.Read(r)
+	if err != nil {
+		return nil, "", err
+	}
+	err = manifestutil.Validate(mfest)
+	if err != nil {
+		return nil, "", err
+	}
+	manifestHash, err := contentHash(manifestFullPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot compute hash for %q: %s", manifestFullPath, err)
+	}
+	return mfest, manifestHash, nil
 }
 
 func contentHash(path string) (string, error) {
