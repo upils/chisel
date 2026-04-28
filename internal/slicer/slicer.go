@@ -87,11 +87,7 @@ func Run(options *RunOptions) error {
 
 	targetDir := filepath.Clean(options.TargetDir)
 	if !filepath.IsAbs(targetDir) {
-		dir, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("cannot obtain current directory: %w", err)
-		}
-		targetDir = filepath.Join(dir, targetDir)
+		return fmt.Errorf("internal error: cannot use a relative target directory %s", targetDir)
 	}
 
 	pkgArchive, err := selectPkgArchives(options.Archives, options.Selection)
@@ -558,11 +554,7 @@ var ErrNoManifest = errors.New("cannot find valid manifest file")
 func SelectValidManifest(targetDir string, release *setup.Release) (*manifest.Manifest, error) {
 	targetDir = filepath.Clean(targetDir)
 	if !filepath.IsAbs(targetDir) {
-		dir, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("cannot obtain current directory: %w", err)
-		}
-		targetDir = filepath.Join(dir, targetDir)
+		return nil, fmt.Errorf("internal error: cannot use a relative target directory %s", targetDir)
 	}
 	manifestPaths := manifestutil.FindPathsInRelease(release)
 	if len(manifestPaths) == 0 {

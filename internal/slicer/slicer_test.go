@@ -615,7 +615,7 @@ var slicerTests = []slicerTest{{
 		`,
 	},
 }, {
-	summary: "Relative content root directory must not error",
+	summary: "Content root directory cannot be relative",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -635,6 +635,7 @@ var slicerTests = []slicerTest{{
 		opts.TargetDir, err = filepath.Rel(dir, opts.TargetDir)
 		c.Assert(err, IsNil)
 	},
+	error: `internal error: cannot use a relative target directory \.\./.*`,
 }, {
 	summary: "Can list parent directories of normal paths",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
@@ -2292,6 +2293,16 @@ func (s *S) TestSelectValidManifest(c *C) {
 		}
 		c.Assert(mfest, NotNil)
 	}
+}
+
+func (s *S) TestSelectValidManifestRelativeTarget(c *C) {
+	targetDir := c.MkDir()
+	dir, err := os.Getwd()
+	c.Assert(err, IsNil)
+	targetDir, err = filepath.Rel(dir, targetDir)
+	c.Assert(err, IsNil)
+	_, err = slicer.SelectValidManifest(targetDir, nil)
+	c.Assert(err, ErrorMatches, `internal error: cannot use a relative target directory \.\./.*`)
 }
 
 func manifestPathForDir(dir string) string {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -76,10 +77,19 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
+	targetDir := filepath.Clean(cmd.RootDir)
+	if !filepath.IsAbs(targetDir) {
+		dir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("cannot obtain current directory: %w", err)
+		}
+		targetDir = filepath.Join(dir, targetDir)
+	}
+
 	var mfest *manifest.Manifest
 	// TODO: Remove this gating once the final upgrading strategy is in place.
 	if os.Getenv("CHISEL_RECUT_EXPERIMENTAL") != "" {
-		mfest, err = slicer.SelectValidManifest(cmd.RootDir, release)
+		mfest, err = slicer.SelectValidManifest(targetDir, release)
 		if err == nil {
 			err = mfest.IterateSlices("", func(slice *manifest.Slice) error {
 				sk, err := setup.ParseSliceKey(slice.Name)
@@ -147,7 +157,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 	err = slicer.Run(&slicer.RunOptions{
 		Selection: selection,
 		Archives:  archives,
-		TargetDir: cmd.RootDir,
+		TargetDir: targetDir,
 	})
 	return err
 }
