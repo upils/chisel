@@ -21,7 +21,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: benchmark-report
-          path: report.md
+          path: benchmark-report.md
           github-token: ${{ secrets.ROCKSBOT_CHISEL_PR_COMMENTER }}
           run-id: ${{ github.event.workflow_run.id }}
 
@@ -38,7 +38,7 @@ jobs:
           # Filters and formats the JSON into a `key=value` string with basic error handling.
           JQ_FILTER: >-
             .[0]
-            | if (.number == null) then error("Could not find PR number") end
+            | if (.number == null) then error("Cannot find PR number") end
             | "number=\(.number)"
         run: |
           gh pr list --repo "${{ github.repository }}" --state all --search "${QUERY_PR}" \
@@ -47,6 +47,6 @@ jobs:
       - name: Post message to PR
         uses: mshick/add-pr-comment@dd126dd8c253650d181ad9538d8b4fa218fc31e8 # v2
         with:
-          message-path: report.md
+          message-path: benchmark-report.md
           issue: ${{ steps.get-pr-number.outputs.number }}
           repo-token: ${{ secrets.ROCKSBOT_CHISEL_PR_COMMENTER }}
