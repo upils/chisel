@@ -2167,6 +2167,516 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 	}
 }
 
+type slicerRecutTest struct {
+	summary     string
+	arch        string
+	release     map[string]string
+	pkgs        []*testutil.TestPackage
+	cutSlices   []setup.SliceKey
+	recutSlices []setup.SliceKey
+	// Modifies the filesystem built after the first execution and before the
+	// second one.
+	alterFilesystem func(c *C, targetDir string)
+	filesystem      map[string]string
+	manifestPaths   map[string]string
+	manifestPkgs    map[string]string
+	error           string
+}
+
+var slicerRecutTests = []slicerRecutTest{{
+	summary:     "Basic recut",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}, {"test-package", "slice2"}, {"other-package", "slice1"}},
+	pkgs: []*testutil.TestPackage{{
+		Name:    "test-package",
+		Hash:    "h1",
+		Version: "v1",
+		Arch:    "a1",
+		Data:    testutil.PackageData["test-package"],
+	}, {
+		Name:    "other-package",
+		Hash:    "h2",
+		Version: "v2",
+		Arch:    "a2",
+		Data:    testutil.PackageData["other-package"],
+	}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/file:
+						/dir/file-copy:  {copy: /dir/file}
+						/other-dir/file: {symlink: ../dir/file}
+				slice2:
+					contents:
+						/dir/other-file:
+						/parent/permissions/file:
+		`,
+		"slices/mydir/other-package.yaml": `
+			package: other-package
+			slices:
+				slice1:
+					contents:
+						/file:
+		`,
+	},
+	filesystem: map[string]string{
+		"/dir/":                    "dir 0755",
+		"/dir/file":                "file 0644 cc55e2ec",
+		"/dir/file-copy":           "file 0644 cc55e2ec",
+		"/dir/other-file":          "file 0644 63d5dd49",
+		"/file":                    "file 0644 fc02ca0e",
+		"/other-dir/":              "dir 0755",
+		"/other-dir/file":          "symlink ../dir/file",
+		"/parent/":                 "dir 01777", // Permissions from the tarball preserved.
+		"/parent/permissions/":     "dir 0764",  // Permissions from the tarball preserved.
+		"/parent/permissions/file": "file 0755 722c14b3",
+	},
+	manifestPaths: map[string]string{
+		"/dir/file":                "file 0644 cc55e2ec {test-package_slice1}",
+		"/dir/file-copy":           "file 0644 cc55e2ec {test-package_slice1}",
+		"/dir/other-file":          "file 0644 63d5dd49 {test-package_slice2}",
+		"/other-dir/file":          "symlink ../dir/file {test-package_slice1}",
+		"/parent/permissions/file": "file 0755 722c14b3 {test-package_slice2}",
+		"/file":                    "file 0644 fc02ca0e {other-package_slice1}",
+	},
+	manifestPkgs: map[string]string{
+		"test-package":  "test-package v1 a1 h1",
+		"other-package": "other-package v2 a2 h2",
+	},
+}, {
+	summary:     "Upgrade removes obsolete paths when selection shrinks",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice2"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/file:
+				slice2:
+					contents:
+						/dir/other-file:
+		`,
+	},
+	filesystem: map[string]string{
+		"/dir/":           "dir 0755",
+		"/dir/other-file": "file 0644 63d5dd49",
+	},
+	manifestPaths: map[string]string{
+		"/dir/other-file": "file 0644 63d5dd49 {test-package_slice2}",
+	},
+}, {
+	summary:     "Upgrade overrides modified content and mode",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/file:
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		modifiedPath := filepath.Join(targetDir, "dir/file")
+		err := os.WriteFile(modifiedPath, []byte("data2"), 0o700)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/dir/":     "dir 0755",
+		"/dir/file": "file 0644 cc55e2ec",
+	},
+	manifestPaths: map[string]string{
+		"/dir/file": "file 0644 cc55e2ec {test-package_slice1}",
+	},
+}, {
+	summary:     "Upgrade keeps untracked files",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/file:
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		err := os.Mkdir(filepath.Join(targetDir, "extra"), 0o755)
+		c.Assert(err, IsNil)
+		err = os.WriteFile(filepath.Join(targetDir, "extra", "untracked"), []byte("data"), 0o644)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/extra/":          "dir 0755",
+		"/extra/untracked": "file 0644 3a6eb079",
+		"/dir/":            "dir 0755",
+		"/dir/file":        "file 0644 cc55e2ec",
+	},
+	manifestPaths: map[string]string{
+		"/dir/file": "file 0644 cc55e2ec {test-package_slice1}",
+	},
+}, {
+	summary:     "Upgrade overrides existing mode on directories",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}, {"test-package", "slice2"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/:
+				slice2:
+					contents:
+						/dir/file:
+						/other-dir/:
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		err := os.Mkdir(filepath.Join(targetDir, "other-dir"), 0o777)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/dir/":       "dir 0755",
+		"/other-dir/": "dir 0755",
+		"/dir/file":   "file 0644 cc55e2ec",
+	},
+	manifestPaths: map[string]string{
+		"/dir/":       "dir 0755 {test-package_slice1}",
+		"/other-dir/": "dir 0755 {test-package_slice2}",
+		"/dir/file":   "file 0644 cc55e2ec {test-package_slice2}",
+	},
+}, {
+	summary:     "Upgrade fails to override existing file",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}, {"test-package", "slice2"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/:
+				slice2:
+					contents:
+						/dir/file:
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		err := os.WriteFile(filepath.Join(targetDir, "dir", "file"), []byte("data"), 0o644)
+		c.Assert(err, IsNil)
+	},
+	error: "cannot override user content: /dir/file exists",
+}, {
+	summary:     "Upgrade relicate implicit parent dirs",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice1"}, {"test-package", "slice2"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/dir/file: {text: data}
+				slice2:
+					contents:
+						/parent/permissions/file:
+		`,
+	},
+	filesystem: map[string]string{
+		"/dir/":                    "dir 0755",
+		"/dir/file":                "file 0644 3a6eb079",
+		"/parent/":                 "dir 01777",
+		"/parent/permissions/":     "dir 0764",
+		"/parent/permissions/file": "file 0755 722c14b3",
+	},
+	manifestPaths: map[string]string{
+		"/dir/file":                "file 0644 3a6eb079 {test-package_slice1}",
+		"/parent/permissions/file": "file 0755 722c14b3 {test-package_slice2}",
+	},
+}, {
+	summary:     "Upgrade removes obsolete content but keeps non-empty directories",
+	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
+	recutSlices: []setup.SliceKey{{"test-package", "slice2"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				slice1:
+					contents:
+						/old-dir/: {make: true}
+						/link: {symlink: target}
+						/baz: {text: data}
+						/foo: {symlink: baz}
+				slice2:
+					contents:
+						/new-file: {text: data1}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		err := os.WriteFile(filepath.Join(targetDir, "old-dir", "file"), []byte("data"), 0o644)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/new-file":     "file 0644 5b41362b",
+		"/old-dir/":     "dir 0755",
+		"/old-dir/file": "file 0644 3a6eb079",
+	},
+	manifestPaths: map[string]string{
+		"/new-file": "file 0644 5b41362b {test-package_slice2}",
+	},
+}, {
+	summary:     "Recut fixes mode of existing .chisel directory",
+	cutSlices:   []setup.SliceKey{{"test-package", "myslice"}},
+	recutSlices: []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		chiselPath := filepath.Join(targetDir, ".chisel")
+		err := os.Mkdir(chiselPath, 0o700)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/file": "file 0644 5b41362b",
+	},
+	manifestPaths: map[string]string{
+		"/file": "file 0644 5b41362b {test-package_myslice}",
+	},
+}, {
+	summary:     "Recut fails when .chisel path is not a dir",
+	cutSlices:   []setup.SliceKey{{"test-package", "myslice"}},
+	recutSlices: []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		chiselPath := filepath.Join(targetDir, ".chisel")
+		err := os.Symlink("/nonexistent", chiselPath)
+		c.Assert(err, IsNil)
+	},
+	error: `cannot create state directory: existing entry at .*/\.chisel is not a directory`,
+}, {
+	summary:     "Recut keeps non-empty .chisel directory",
+	cutSlices:   []setup.SliceKey{{"test-package", "myslice"}},
+	recutSlices: []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		chiselPath := filepath.Join(targetDir, ".chisel")
+		err := os.Mkdir(chiselPath, 0o755)
+		c.Assert(err, IsNil)
+		err = os.WriteFile(filepath.Join(chiselPath, "keep"), []byte("keep"), 0o644)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/.chisel/":     "dir 0755",
+		"/.chisel/keep": "file 0644 6ca7ea2f",
+		"/file":         "file 0644 5b41362b",
+	},
+	manifestPaths: map[string]string{
+		"/file": "file 0644 5b41362b {test-package_myslice}",
+	},
+}, {
+	summary:     "Recut fails when target dir is not writable",
+	cutSlices:   []setup.SliceKey{{"test-package", "myslice"}},
+	recutSlices: []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		err := os.Chmod(targetDir, 0o555)
+		c.Assert(err, IsNil)
+	},
+	error: `cannot create state directory: mkdir .*/\.chisel: permission denied`,
+}}
+
+func (s *S) TestRunRecut(c *C) {
+	for _, test := range slicerRecutTests {
+		c.Logf("Summary: %s", test.summary)
+
+		if _, ok := test.release["chisel.yaml"]; !ok {
+			test.release["chisel.yaml"] = testutil.DefaultChiselYaml
+		}
+		if test.pkgs == nil {
+			test.pkgs = []*testutil.TestPackage{{
+				Name: "test-package",
+				Data: testutil.PackageData["test-package"],
+			}}
+		}
+		for _, pkg := range test.pkgs {
+			// We need to set these fields for manifest validation.
+			if pkg.Arch == "" {
+				pkg.Arch = "arch"
+			}
+			if pkg.Hash == "" {
+				pkg.Hash = "hash"
+			}
+			if pkg.Version == "" {
+				pkg.Version = "version"
+			}
+		}
+
+		releaseDir := c.MkDir()
+		for path, data := range test.release {
+			fpath := filepath.Join(releaseDir, path)
+			err := os.MkdirAll(filepath.Dir(fpath), 0o755)
+			c.Assert(err, IsNil)
+			err = os.WriteFile(fpath, testutil.Reindent(data), 0o644)
+			c.Assert(err, IsNil)
+		}
+
+		release, err := setup.ReadRelease(releaseDir)
+		c.Assert(err, IsNil)
+
+		// Create a manifest slice and add it to the selection.
+		manifestPackage := test.cutSlices[0].Package
+		manifestPath := "/chisel-data/manifest.wall"
+		release.Packages[manifestPackage].Slices["manifest"] = &setup.Slice{
+			Package:   manifestPackage,
+			Name:      "manifest",
+			Essential: nil,
+			Contents: map[string]setup.PathInfo{
+				"/chisel-data/**": {
+					Kind:     "generate",
+					Generate: "manifest",
+				},
+			},
+			Scripts: setup.SliceScripts{},
+		}
+		test.cutSlices = append(test.cutSlices, setup.SliceKey{
+			Package: manifestPackage,
+			Slice:   "manifest",
+		})
+
+		selection, err := setup.Select(release, test.cutSlices, test.arch)
+		c.Assert(err, IsNil)
+
+		archives := map[string]archive.Archive{}
+		for name, setupArchive := range release.Archives {
+			pkgs := make(map[string]*testutil.TestPackage)
+			for _, pkg := range test.pkgs {
+				if len(pkg.Archives) == 0 || slices.Contains(pkg.Archives, name) {
+					pkgs[pkg.Name] = pkg
+				}
+			}
+			archive := &testutil.TestArchive{
+				Opts: archive.Options{
+					Label:      setupArchive.Name,
+					Version:    setupArchive.Version,
+					Suites:     setupArchive.Suites,
+					Components: setupArchive.Components,
+					Pro:        setupArchive.Pro,
+					Arch:       test.arch,
+				},
+				Packages: pkgs,
+			}
+			archives[name] = archive
+		}
+
+		targetDir := c.MkDir()
+		options := slicer.RunOptions{
+			Selection: selection,
+			Archives:  archives,
+			TargetDir: targetDir,
+			Release:   release,
+		}
+		// First run.
+		err = slicer.Run(&options)
+		c.Assert(err, IsNil)
+
+		if test.alterFilesystem != nil {
+			test.alterFilesystem(c, targetDir)
+		}
+		mfest := readManifest(c, options.TargetDir, manifestPath)
+
+		test.recutSlices = append(test.recutSlices, setup.SliceKey{
+			Package: manifestPackage,
+			Slice:   "manifest",
+		})
+		selection, err = setup.Select(release, test.recutSlices, test.arch)
+		c.Assert(err, IsNil)
+
+		options = slicer.RunOptions{
+			Selection:        selection,
+			Archives:         archives,
+			TargetDir:        targetDir,
+			PreviousManifest: mfest,
+			Release:          release,
+		}
+		// Second run.
+		err = slicer.Run(&options)
+		if test.error != "" {
+			c.Assert(err, ErrorMatches, test.error)
+			continue
+		}
+		c.Assert(err, IsNil)
+
+		if test.filesystem == nil && test.manifestPaths == nil && test.manifestPkgs == nil {
+			continue
+		}
+		mfest = readManifest(c, options.TargetDir, manifestPath)
+
+		// Assert state of final filesystem.
+		if test.filesystem != nil {
+			filesystem := testutil.TreeDump(options.TargetDir)
+			c.Assert(filesystem["/chisel-data/"], Not(HasLen), 0)
+			c.Assert(filesystem[manifestPath], Not(HasLen), 0)
+			delete(filesystem, "/chisel-data/")
+			delete(filesystem, manifestPath)
+			c.Assert(filesystem, DeepEquals, test.filesystem)
+		}
+
+		// Assert state of the files recorded in the manifest.
+		if test.manifestPaths != nil {
+			pathsDump, err := treeDumpManifestPaths(mfest)
+			c.Assert(err, IsNil)
+			c.Assert(pathsDump[manifestPath], Not(HasLen), 0)
+			delete(pathsDump, manifestPath)
+			c.Assert(pathsDump, DeepEquals, test.manifestPaths)
+		}
+
+		// Assert state of the packages recorded in the manifest.
+		if test.manifestPkgs != nil {
+			pkgsDump, err := dumpManifestPkgs(mfest)
+			c.Assert(err, IsNil)
+			c.Assert(pkgsDump, DeepEquals, test.manifestPkgs)
+		}
+	}
+}
+
 type selectValidManifestTest struct {
 	summary          string
 	setup            func(c *C, targetDir string, release *setup.Release)

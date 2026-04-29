@@ -30,9 +30,11 @@ import (
 const manifestMode fs.FileMode = 0644
 
 type RunOptions struct {
-	Selection *setup.Selection
-	Archives  map[string]archive.Archive
-	TargetDir string
+	Selection        *setup.Selection
+	Archives         map[string]archive.Archive
+	TargetDir        string
+	PreviousManifest *manifest.Manifest
+	Release          *setup.Release
 }
 
 type pathData struct {
@@ -90,19 +92,96 @@ func Run(options *RunOptions) error {
 		return fmt.Errorf("internal error: cannot use a relative target directory %s", targetDir)
 	}
 
-	pkgArchive, err := selectPkgArchives(options.Archives, options.Selection)
+	cutTargetDir := options.TargetDir
+	if options.PreviousManifest != nil {
+		// Prepare state directory in target directory.
+		// There is an unlikely case that a package contains a file or directory
+		// with this name. That would lead to a collision when upgrading content
+		// from the temporary rootfs in the state directory to the target directory.
+		// TODO: Reserve this name. The release validation would then ensure it
+		// cannot be used in the release.
+		stateDir, err := mkStateDir(targetDir)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			// The state directory must only be removed if empty. This call will do so
+			// or silently fail.
+			os.Remove(stateDir)
+		}()
+		// When recuting, cut inside a temporary workdir.
+		tmpWorkDir, err := os.MkdirTemp(stateDir, "workdir-*")
+		if err != nil {
+			return fmt.Errorf("cannot create working directory: %w", err)
+		}
+		cutTargetDir = tmpWorkDir
+		defer func() {
+			os.RemoveAll(tmpWorkDir)
+		}()
+	}
+
+	err := cut(cutTargetDir, options.Selection, options.Archives)
 	if err != nil {
 		return err
 	}
 
-	prefers, err := options.Selection.Prefers()
+	if options.PreviousManifest != nil {
+		return merge(options.TargetDir, cutTargetDir, options.PreviousManifest, options.Release)
+	}
+
+	return nil
+}
+
+const (
+	stateDir              = ".chisel"
+	stateMode os.FileMode = 0o755
+)
+
+// mkStateDir ensures the state dir exists under the given directory, with the proper
+// permissions.
+func mkStateDir(targetDir string) (dir string, err error) {
+	dir = filepath.Join(targetDir, stateDir)
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("cannot create state directory: %w", err)
+		}
+	}()
+	err = os.Mkdir(dir, stateMode)
+	if err != nil {
+		if !os.IsExist(err) {
+			return "", err
+		}
+		fileinfo, err := os.Lstat(dir)
+		if err != nil {
+			return "", err
+		}
+		if !fileinfo.IsDir() {
+			return "", fmt.Errorf("existing entry at %s is not a directory", dir)
+		}
+		// The needed mode might change between Chisel versions. Reset it to ensure
+		// backward compatibility.
+		err = os.Chmod(dir, stateMode)
+		if err != nil {
+			return "", err
+		}
+	}
+	return dir, nil
+}
+
+func cut(targetDir string, selection *setup.Selection, archives map[string]archive.Archive) error {
+	pkgArchive, err := selectPkgArchives(archives, selection)
+	if err != nil {
+		return err
+	}
+
+	prefers, err := selection.Prefers()
 	if err != nil {
 		return err
 	}
 
 	// Build information to process the selection.
 	extract := make(map[string]map[string][]deb.ExtractInfo)
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		extractPackage := extract[slice.Package]
 		if extractPackage == nil {
 			extractPackage = make(map[string][]deb.ExtractInfo)
@@ -148,7 +227,7 @@ func Run(options *RunOptions) error {
 	// Fetch all packages, using the selection order.
 	packages := make(map[string]io.ReadSeekCloser)
 	var pkgInfos []*archive.PackageInfo
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		if packages[slice.Package] != nil {
 			continue
 		}
@@ -233,7 +312,7 @@ func Run(options *RunOptions) error {
 	}
 
 	// Extract all packages, also using the selection order.
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		reader := packages[slice.Package]
 		if reader == nil {
 			continue
@@ -268,7 +347,7 @@ func Run(options *RunOptions) error {
 	// First group them by their relative path. Then create them and attribute
 	// them to the appropriate slices.
 	relPaths := map[string][]*setup.Slice{}
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		arch := pkgArchive[slice.Package].Options().Arch
 		for relPath, pathInfo := range slice.Contents {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
@@ -328,7 +407,7 @@ func Run(options *RunOptions) error {
 		CheckRead:  checker.checkKnown,
 		OnWrite:    report.Mutate,
 	}
-	for _, slice := range options.Selection.Slices {
+	for _, slice := range selection.Slices {
 		opts := scripts.RunOptions{
 			Label:  "mutate",
 			Script: slice.Scripts.Mutate,
@@ -347,7 +426,7 @@ func Run(options *RunOptions) error {
 		return err
 	}
 
-	return generateManifests(targetDir, options.Selection, report, pkgInfos)
+	return generateManifests(targetDir, selection, report, pkgInfos)
 }
 
 func generateManifests(targetDir string, selection *setup.Selection,

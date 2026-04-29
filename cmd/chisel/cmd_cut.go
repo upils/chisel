@@ -87,7 +87,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 	}
 
 	var mfest *manifest.Manifest
-	// TODO: Remove this gating once the final upgrading strategy is in place.
+	// TODO: Remove this gating once the rootfs verification is in place.
 	if os.Getenv("CHISEL_RECUT_EXPERIMENTAL") != "" {
 		mfest, err = slicer.SelectValidManifest(targetDir, release)
 		if err == nil {
@@ -155,9 +155,11 @@ func (cmd *cmdCut) Execute(args []string) error {
 	}
 
 	err = slicer.Run(&slicer.RunOptions{
-		Selection: selection,
-		Archives:  archives,
-		TargetDir: targetDir,
+		Selection:        selection,
+		Archives:         archives,
+		TargetDir:        targetDir,
+		PreviousManifest: mfest,
+		Release:          release,
 	})
 	return err
 }
