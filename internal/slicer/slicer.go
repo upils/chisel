@@ -33,7 +33,6 @@ type RunOptions struct {
 	Selection        *setup.Selection
 	Archives         map[string]archive.Archive
 	TargetDir        string
-	StateDir         string
 	PreviousManifest *manifest.Manifest
 	Release          *setup.Release
 }
@@ -95,10 +94,25 @@ func Run(options *RunOptions) error {
 
 	cutTargetDir := options.TargetDir
 	if options.PreviousManifest != nil {
-		// When recuting, cut inside a temporary workdir.
-		tmpWorkDir, err := os.MkdirTemp(options.StateDir, "chisel-workdir-*")
+		// Prepare state directory in target directory.
+		// There is an unlikely case that a package contains a file or directory
+		// with this name. That would lead to a collision when upgrading content
+		// from the temporary rootfs in the state directory to the target directory.
+		// TODO: Reserve this name. The release validation would then ensure it
+		// cannot be used in the release.
+		stateDir, err := mkStateDir(targetDir)
 		if err != nil {
-			return fmt.Errorf("cannot create temporary working directory: %w", err)
+			return err
+		}
+		defer func() {
+			// The state directory must only be removed if empty. This call will do so
+			// or silently fail.
+			os.Remove(stateDir)
+		}()
+		// When recuting, cut inside a temporary workdir.
+		tmpWorkDir, err := os.MkdirTemp(stateDir, "workdir-*")
+		if err != nil {
+			return fmt.Errorf("cannot create working directory: %w", err)
 		}
 		cutTargetDir = tmpWorkDir
 		defer func() {
@@ -116,6 +130,42 @@ func Run(options *RunOptions) error {
 	}
 
 	return nil
+}
+
+const (
+	stateDir              = ".chisel"
+	stateMode os.FileMode = 0o755
+)
+
+// mkStateDir ensures the state dir exists under the given directory, with the proper
+// permissions.
+func mkStateDir(targetDir string) (dir string, err error) {
+	dir = filepath.Join(targetDir, stateDir)
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("cannot create state directory: %w", err)
+		}
+	}()
+	err = os.Mkdir(dir, stateMode)
+	if err != nil {
+		if !os.IsExist(err) {
+			return "", err
+		}
+		fileinfo, err := os.Lstat(dir)
+		if err != nil {
+			return "", err
+		}
+		if !fileinfo.IsDir() {
+			return "", fmt.Errorf("existing entry at %s is not a directory", dir)
+		}
+		// The needed mode might change between Chisel versions. Reset it to ensure
+		// backward compatibility.
+		err = os.Chmod(dir, stateMode)
+		if err != nil {
+			return "", err
+		}
+	}
+	return dir, nil
 }
 
 func cut(targetDir string, selection *setup.Selection, archives map[string]archive.Archive) error {

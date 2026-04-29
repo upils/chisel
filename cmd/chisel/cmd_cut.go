@@ -154,27 +154,10 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	// Prepare state directory in target directory.
-	// There is an unlikely case that a package contains a file or directory
-	// with this name. That would lead to a collision when upgrading content
-	// from the temporary rootfs in the state directory to the target directory.
-	// TODO: Reserve this name. The release validation would then ensure it
-	// cannot be used in the release.
-	stateDir, err := slicer.MkStateDir(targetDir, 0o755)
-	if err != nil {
-		return fmt.Errorf("cannot create temporary working directory: %s", err)
-	}
-	defer func() {
-		// The state directory must only be removed if empty. This call will do so
-		// or silently fail.
-		os.Remove(stateDir)
-	}()
-
 	err = slicer.Run(&slicer.RunOptions{
 		Selection:        selection,
 		Archives:         archives,
 		TargetDir:        targetDir,
-		StateDir:         stateDir,
 		PreviousManifest: mfest,
 		Release:          release,
 	})

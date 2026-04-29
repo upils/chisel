@@ -2109,7 +2109,6 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 				Selection: selection,
 				Archives:  archives,
 				TargetDir: c.MkDir(),
-				StateDir:  c.MkDir(),
 			}
 			if test.hackopt != nil {
 				test.hackopt(c, &options)
@@ -2185,7 +2184,7 @@ type slicerRecutTest struct {
 }
 
 var slicerRecutTests = []slicerRecutTest{{
-	summary:     "Basic upgrade",
+	summary:     "Basic recut",
 	cutSlices:   []setup.SliceKey{{"test-package", "slice1"}},
 	recutSlices: []setup.SliceKey{{"test-package", "slice1"}, {"test-package", "slice2"}, {"other-package", "slice1"}},
 	pkgs: []*testutil.TestPackage{{
@@ -2433,6 +2432,95 @@ var slicerRecutTests = []slicerRecutTest{{
 	manifestPaths: map[string]string{
 		"/new-file": "file 0644 5b41362b {test-package_slice2}",
 	},
+}, {
+	summary:     "Recut fixes mode of existing .chisel directory",
+	cutSlices:   []setup.SliceKey{{"test-package", "myslice"}},
+	recutSlices: []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		chiselPath := filepath.Join(targetDir, ".chisel")
+		err := os.Mkdir(chiselPath, 0o700)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/file": "file 0644 5b41362b",
+	},
+	manifestPaths: map[string]string{
+		"/file": "file 0644 5b41362b {test-package_myslice}",
+	},
+}, {
+	summary:     "Recut fails when .chisel path is not a dir",
+	cutSlices:   []setup.SliceKey{{"test-package", "myslice"}},
+	recutSlices: []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		chiselPath := filepath.Join(targetDir, ".chisel")
+		err := os.Symlink("/nonexistent", chiselPath)
+		c.Assert(err, IsNil)
+	},
+	error: `cannot create state directory: existing entry at .*/\.chisel is not a directory`,
+}, {
+	summary:     "Recut keeps non-empty .chisel directory",
+	cutSlices:   []setup.SliceKey{{"test-package", "myslice"}},
+	recutSlices: []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		chiselPath := filepath.Join(targetDir, ".chisel")
+		err := os.Mkdir(chiselPath, 0o755)
+		c.Assert(err, IsNil)
+		err = os.WriteFile(filepath.Join(chiselPath, "keep"), []byte("keep"), 0o644)
+		c.Assert(err, IsNil)
+	},
+	filesystem: map[string]string{
+		"/.chisel/":     "dir 0755",
+		"/.chisel/keep": "file 0644 6ca7ea2f",
+		"/file":         "file 0644 5b41362b",
+	},
+	manifestPaths: map[string]string{
+		"/file": "file 0644 5b41362b {test-package_myslice}",
+	},
+}, {
+	summary:     "Recut fails when target dir is not writable",
+	cutSlices:   []setup.SliceKey{{"test-package", "myslice"}},
+	recutSlices: []setup.SliceKey{{"test-package", "myslice"}},
+	release: map[string]string{
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/file: {text: data1}
+		`,
+	},
+	alterFilesystem: func(c *C, targetDir string) {
+		err := os.Chmod(targetDir, 0o555)
+		c.Assert(err, IsNil)
+	},
+	error: `cannot create state directory: mkdir .*/\.chisel: permission denied`,
 }}
 
 func (s *S) TestRunRecut(c *C) {
@@ -2519,12 +2607,10 @@ func (s *S) TestRunRecut(c *C) {
 		}
 
 		targetDir := c.MkDir()
-		stateDir := c.MkDir()
 		options := slicer.RunOptions{
 			Selection: selection,
 			Archives:  archives,
 			TargetDir: targetDir,
-			StateDir:  stateDir,
 			Release:   release,
 		}
 		// First run.
@@ -2547,7 +2633,6 @@ func (s *S) TestRunRecut(c *C) {
 			Selection:        selection,
 			Archives:         archives,
 			TargetDir:        targetDir,
-			StateDir:         stateDir,
 			PreviousManifest: mfest,
 			Release:          release,
 		}
