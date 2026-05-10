@@ -27,11 +27,11 @@ import (
 const manifestMode fs.FileMode = 0o644
 
 type RunOptions struct {
-	Selection  *setup.Selection
-	Archives   map[string]archive.Archive
-	BinSources map[string]bins.Source
-	TargetDir  string
-	Arch       string
+	Selection *setup.Selection
+	Archives  map[string]archive.Archive
+	BinSource bins.Source
+	TargetDir string
+	Arch      string
 }
 
 type pathData struct {
@@ -104,8 +104,10 @@ func Run(options *RunOptions) error {
 	for pkg, a := range pkgArchive {
 		pkgArch[pkg] = a.Options().Arch
 	}
-	for pkg := range options.BinSources {
-		pkgArch[pkg] = options.Arch
+	for _, slice := range options.Selection.Slices {
+		if bins.IsBinPackage(slice.Package) {
+			pkgArch[slice.Package] = options.Arch
+		}
 	}
 
 	prefers, err := options.Selection.Prefers()
@@ -166,12 +168,10 @@ func Run(options *RunOptions) error {
 		if packages[slice.Package] != nil {
 			continue
 		}
-		if bins.IsBinPackage(slice.Package) && options.BinSources != nil {
-			src := options.BinSources[slice.Package]
-			if src == nil {
-				return fmt.Errorf("no bin source for package %q", slice.Package)
-			}
-			reader, info, err := src.Fetch(slice.Package)
+		if bins.IsBinPackage(slice.Package) && options.BinSource != nil {
+			pkg := options.Selection.Release.Packages[slice.Package]
+			track := pkg.DefaultTrack
+			reader, info, err := options.BinSource.Fetch(slice.Package, track, "stable")
 			if err != nil {
 				return err
 			}
@@ -495,9 +495,9 @@ func createFile(targetDir, relPath string, pathInfo setup.PathInfo) (*fsutil.Ent
 	targetMode := pathInfo.Mode
 	if targetMode == 0 {
 		if pathInfo.Kind == setup.DirPath {
-			targetMode = 0755
+			targetMode = 0o755
 		} else {
-			targetMode = 0644
+			targetMode = 0o644
 		}
 	}
 
@@ -550,7 +550,7 @@ func selectPkgArchives(archives map[string]archive.Archive, selection *setup.Sel
 		if _, ok := pkgArchive[s.Package]; ok {
 			continue
 		}
-		// Skip bin packages; they are handled by BinSources.
+		// Skip bin packages; they are handled by BinSource.
 		if bins.IsBinPackage(s.Package) {
 			continue
 		}

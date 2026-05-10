@@ -134,24 +134,14 @@ func (s *S) TestBinName(c *C) {
 
 func (s *S) TestOpenMissingArch(c *C) {
 	_, err := bins.Open(&bins.Options{
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, ErrorMatches, "bins options missing arch")
 }
 
-func (s *S) TestOpenMissingTrack(c *C) {
-	_, err := bins.Open(&bins.Options{
-		Arch:     "amd64",
-		CacheDir: c.MkDir(),
-	})
-	c.Assert(err, ErrorMatches, "bins options missing track")
-}
-
 func (s *S) TestOpenValid(c *C) {
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
@@ -167,12 +157,11 @@ func (s *S) TestInfoSuccess(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	info, err := src.Info("bin-mybin")
+	info, err := src.Info("bin-mybin", "latest", "stable")
 	c.Assert(err, IsNil)
 	c.Check(info.Name, Equals, "mybin")
 	c.Check(info.Version, Equals, "1.2.3")
@@ -188,12 +177,11 @@ func (s *S) TestInfoArm64(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "arm64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	info, err := src.Info("bin-mybin")
+	info, err := src.Info("bin-mybin", "latest", "stable")
 	c.Assert(err, IsNil)
 	c.Check(info.Name, Equals, "mybin")
 	c.Check(info.Revision, Equals, 43)
@@ -208,13 +196,11 @@ func (s *S) TestInfoCustomRisk(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
-		Risk:     "edge",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	info, err := src.Info("bin-mybin")
+	info, err := src.Info("bin-mybin", "latest", "edge")
 	c.Assert(err, IsNil)
 	c.Check(info.Name, Equals, "mybin")
 	c.Check(info.Revision, Equals, 50)
@@ -229,12 +215,11 @@ func (s *S) TestInfoNotFound(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, err = src.Info("bin-nosuchbin")
+	_, err = src.Info("bin-nosuchbin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `bin "nosuchbin" not found`)
 }
 
@@ -246,12 +231,11 @@ func (s *S) TestInfoAPIError(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, err = src.Info("bin-mybin")
+	_, err = src.Info("bin-mybin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `cannot fetch from bins API: 500.*`)
 }
 
@@ -263,12 +247,11 @@ func (s *S) TestInfoHTTPError(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, err = src.Info("bin-mybin")
+	_, err = src.Info("bin-mybin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `cannot talk to bins API: connection refused`)
 }
 
@@ -281,24 +264,22 @@ func (s *S) TestInfoNoMatchingArch(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "s390x",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, err = src.Info("bin-mybin")
+	_, err = src.Info("bin-mybin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `bin "mybin" has no latest/stable release for architecture "s390x"`)
 }
 
 func (s *S) TestInfoInvalidPkgName(c *C) {
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, err = src.Info("notabin")
+	_, err = src.Info("notabin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `invalid bin package name: "notabin" does not have "bin-" prefix`)
 }
 
@@ -310,12 +291,11 @@ func (s *S) TestExistsTrue(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	c.Check(src.Exists("bin-mybin"), Equals, true)
+	c.Check(src.Exists("bin-mybin", "latest", "stable"), Equals, true)
 }
 
 func (s *S) TestExistsFalse(c *C) {
@@ -326,12 +306,11 @@ func (s *S) TestExistsFalse(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	c.Check(src.Exists("bin-nosuchbin"), Equals, false)
+	c.Check(src.Exists("bin-nosuchbin", "latest", "stable"), Equals, false)
 }
 
 func (s *S) TestFetchDownloadsAndCaches(c *C) {
@@ -357,14 +336,13 @@ func (s *S) TestFetchDownloadsAndCaches(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
 	// The digest won't match the fake content, so the cache will fail.
 	// That's expected — we're testing the flow, not real crypto.
-	_, _, err = src.Fetch("bin-mybin")
+	_, _, err = src.Fetch("bin-mybin", "latest", "stable")
 	c.Assert(err, NotNil)
 	c.Check(infoRequests, Equals, 1)
 	c.Check(downloadRequests, Equals, 1)
@@ -373,12 +351,11 @@ func (s *S) TestFetchDownloadsAndCaches(c *C) {
 func (s *S) TestFetchInvalidPkgName(c *C) {
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, _, err = src.Fetch("notabin")
+	_, _, err = src.Fetch("notabin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `invalid bin package name: "notabin" does not have "bin-" prefix`)
 }
 
@@ -396,12 +373,11 @@ func (s *S) TestFetchDownloadHTTPError(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, _, err = src.Fetch("bin-mybin")
+	_, _, err = src.Fetch("bin-mybin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `cannot download bin "mybin": download failed`)
 }
 
@@ -416,12 +392,11 @@ func (s *S) TestFetchDownloadHTTPStatus(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, _, err = src.Fetch("bin-mybin")
+	_, _, err = src.Fetch("bin-mybin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `cannot download bin "mybin": 503.*`)
 }
 
@@ -433,12 +408,11 @@ func (s *S) TestFetchInfoError(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, _, err = src.Fetch("bin-mybin")
+	_, _, err = src.Fetch("bin-mybin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `bin "mybin" not found`)
 }
 
@@ -496,12 +470,11 @@ func (s *S) TestInfoBadJSON(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, err = src.Info("bin-mybin")
+	_, err = src.Info("bin-mybin", "latest", "stable")
 	c.Assert(err, ErrorMatches, "cannot decode bins API response: .*")
 }
 
@@ -518,11 +491,10 @@ func (s *S) TestInfoEmptyChannelMap(c *C) {
 
 	src, err := bins.Open(&bins.Options{
 		Arch:     "amd64",
-		Track:    "latest",
 		CacheDir: c.MkDir(),
 	})
 	c.Assert(err, IsNil)
 
-	_, err = src.Info("bin-mybin")
+	_, err = src.Info("bin-mybin", "latest", "stable")
 	c.Assert(err, ErrorMatches, `bin "mybin" has no latest/stable release for architecture "amd64"`)
 }

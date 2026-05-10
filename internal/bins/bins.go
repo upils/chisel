@@ -24,16 +24,14 @@ type BinPackageInfo struct {
 
 // Source provides access to bin packages from the Snapcraft store API.
 type Source interface {
-	Fetch(pkg string) (io.ReadSeekCloser, *BinPackageInfo, error)
-	Exists(pkg string) bool
-	Info(pkg string) (*BinPackageInfo, error)
+	Fetch(pkg, track, risk string) (io.ReadSeekCloser, *BinPackageInfo, error)
+	Exists(pkg, track, risk string) bool
+	Info(pkg, track, risk string) (*BinPackageInfo, error)
 }
 
 // Options configures a bin source.
 type Options struct {
 	Arch     string
-	Track    string
-	Risk     string
 	CacheDir string
 }
 
@@ -59,20 +57,8 @@ func Open(options *Options) (Source, error) {
 	if options.Arch == "" {
 		return nil, fmt.Errorf("bins options missing arch")
 	}
-	if options.Track == "" {
-		return nil, fmt.Errorf("bins options missing track")
-	}
-	risk := options.Risk
-	if risk == "" {
-		risk = "stable"
-	}
 	return &binSource{
-		options: Options{
-			Arch:     options.Arch,
-			Track:    options.Track,
-			Risk:     risk,
-			CacheDir: options.CacheDir,
-		},
+		options: *options,
 		cache: &cache.Cache{
 			Dir: options.CacheDir,
 		},
@@ -220,7 +206,7 @@ func validateDownloadURL(downloadURL string) error {
 	return fmt.Errorf("bin download URL has untrusted host %q", u.Host)
 }
 
-func (s *binSource) Info(pkg string) (*BinPackageInfo, error) {
+func (s *binSource) Info(pkg, track, risk string) (*BinPackageInfo, error) {
 	name, err := BinName(pkg)
 	if err != nil {
 		return nil, err
@@ -229,7 +215,7 @@ func (s *binSource) Info(pkg string) (*BinPackageInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, sha3384, version, revision, err := selectRevision(resp, s.options.Arch, s.options.Track, s.options.Risk)
+	_, sha3384, version, revision, err := selectRevision(resp, s.options.Arch, track, risk)
 	if err != nil {
 		return nil, err
 	}
@@ -241,12 +227,12 @@ func (s *binSource) Info(pkg string) (*BinPackageInfo, error) {
 	}, nil
 }
 
-func (s *binSource) Exists(pkg string) bool {
-	_, err := s.Info(pkg)
+func (s *binSource) Exists(pkg, track, risk string) bool {
+	_, err := s.Info(pkg, track, risk)
 	return err == nil
 }
 
-func (s *binSource) Fetch(pkg string) (io.ReadSeekCloser, *BinPackageInfo, error) {
+func (s *binSource) Fetch(pkg, track, risk string) (io.ReadSeekCloser, *BinPackageInfo, error) {
 	name, err := BinName(pkg)
 	if err != nil {
 		return nil, nil, err
@@ -257,7 +243,7 @@ func (s *binSource) Fetch(pkg string) (io.ReadSeekCloser, *BinPackageInfo, error
 	if err != nil {
 		return nil, nil, err
 	}
-	downloadURL, sha3384, version, revision, err := selectRevision(resp, s.options.Arch, s.options.Track, s.options.Risk)
+	downloadURL, sha3384, version, revision, err := selectRevision(resp, s.options.Arch, track, risk)
 	if err != nil {
 		return nil, nil, err
 	}

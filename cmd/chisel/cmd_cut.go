@@ -14,14 +14,16 @@ import (
 	"github.com/canonical/chisel/internal/slicer"
 )
 
-var shortCutHelp = "Cut a tree with selected slices"
-var longCutHelp = `
+var (
+	shortCutHelp = "Cut a tree with selected slices"
+	longCutHelp  = `
 The cut command uses the provided selection of package slices
 to create a new filesystem tree in the root location.
 
 By default it fetches the slices for the same Ubuntu version as the
 current host, unless the --release flag is used.
 `
+)
 
 var cutDescs = map[string]string{
 	"release": "Chisel release name or directory (e.g. ubuntu-22.04)",
@@ -122,37 +124,28 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
-	// Create bin sources for any bin-prefixed packages in the selection.
-	var binSources map[string]bins.Source
+	// Create a bin source if any bin-prefixed packages are in the selection.
+	var binSource bins.Source
 	for _, slice := range selection.Slices {
-		if !bins.IsBinPackage(slice.Package) {
-			continue
+		if bins.IsBinPackage(slice.Package) {
+			var err error
+			binSource, err = bins.Open(&bins.Options{
+				Arch:     cmd.Arch,
+				CacheDir: cache.DefaultDir("chisel"),
+			})
+			if err != nil {
+				return err
+			}
+			break
 		}
-		if binSources == nil {
-			binSources = make(map[string]bins.Source)
-		}
-		if _, ok := binSources[slice.Package]; ok {
-			continue
-		}
-		pkg := release.Packages[slice.Package]
-		src, err := bins.Open(&bins.Options{
-			Arch:     cmd.Arch,
-			Track:    pkg.Track,
-			Risk:     pkg.Risk,
-			CacheDir: cache.DefaultDir("chisel"),
-		})
-		if err != nil {
-			return err
-		}
-		binSources[slice.Package] = src
 	}
 
 	err = slicer.Run(&slicer.RunOptions{
-		Selection:  selection,
-		Archives:   archives,
-		BinSources: binSources,
-		TargetDir:  cmd.RootDir,
-		Arch:       cmd.Arch,
+		Selection: selection,
+		Archives:  archives,
+		BinSource: binSource,
+		TargetDir: cmd.RootDir,
+		Arch:      cmd.Arch,
 	})
 	return err
 }

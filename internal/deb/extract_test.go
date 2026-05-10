@@ -38,19 +38,19 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/file": []deb.ExtractInfo{{
+			"/dir/file": {{
 				Path: "/dir/file",
 			}},
-			"/dir/other-file": []deb.ExtractInfo{{
+			"/dir/other-file": {{
 				Path: "/dir/other-file",
 			}},
-			"/dir/several/levels/deep/file": []deb.ExtractInfo{{
+			"/dir/several/levels/deep/file": {{
 				Path: "/dir/several/levels/deep/file",
 			}},
-			"/dir/nested/": []deb.ExtractInfo{{
+			"/dir/nested/": {{
 				Path: "/dir/nested/",
 			}},
-			"/other-dir/": []deb.ExtractInfo{{
+			"/other-dir/": {{
 				Path: "/other-dir/",
 			}},
 		},
@@ -72,19 +72,19 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/file": []deb.ExtractInfo{{
+			"/dir/file": {{
 				Path: "/dir/file",
 			}},
-			"/dir/other-file": []deb.ExtractInfo{{
+			"/dir/other-file": {{
 				Path: "/dir/other-file",
 			}},
-			"/dir/several/levels/deep/file": []deb.ExtractInfo{{
+			"/dir/several/levels/deep/file": {{
 				Path: "/dir/several/levels/deep/file",
 			}},
-			"/dir/nested/": []deb.ExtractInfo{{
+			"/dir/nested/": {{
 				Path: "/dir/nested/",
 			}},
-			"/other-dir/": []deb.ExtractInfo{{
+			"/other-dir/": {{
 				Path: "/other-dir/",
 			}},
 		},
@@ -108,13 +108,13 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/file": []deb.ExtractInfo{{
+			"/dir/file": {{
 				Path: "/foo/file-copy",
-				Mode: 0600,
+				Mode: 0o600,
 			}},
-			"/dir/several/levels/deep/": []deb.ExtractInfo{{
+			"/dir/several/levels/deep/": {{
 				Path: "/foo/bar/dir-copy",
-				Mode: 0700,
+				Mode: 0o700,
 			}},
 		},
 	},
@@ -130,7 +130,7 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/file": []deb.ExtractInfo{{
+			"/dir/file": {{
 				Path: "/dir/foo/file-copy-1",
 			}, {
 				Path: "/dir/bar/file-copy-2",
@@ -150,7 +150,7 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/s*/": []deb.ExtractInfo{{
+			"/dir/s*/": {{
 				Path: "/dir/s*/",
 			}},
 		},
@@ -165,7 +165,7 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/s**": []deb.ExtractInfo{{
+			"/dir/s**": {{
 				Path: "/dir/s**",
 			}},
 		},
@@ -183,10 +183,10 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/s**": []deb.ExtractInfo{{
+			"/dir/s**": {{
 				Path: "/dir/s**",
 			}},
-			"/dir/n*/": []deb.ExtractInfo{{
+			"/dir/n*/": {{
 				Path: "/dir/n*/",
 			}},
 		},
@@ -205,7 +205,7 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/foo/b**": []deb.ExtractInfo{{
+			"/foo/b**": {{
 				Path: "/foo/g**",
 			}},
 		},
@@ -216,7 +216,7 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/foo/b**": []deb.ExtractInfo{{
+			"/foo/b**": {{
 				Path: "/foo/b**",
 			}, {
 				Path: "/foo/g**",
@@ -229,9 +229,9 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/n**": []deb.ExtractInfo{{
+			"/dir/n**": {{
 				Path: "/dir/n**",
-				Mode: 0777,
+				Mode: 0o777,
 			}},
 		},
 	},
@@ -241,7 +241,7 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/missing-file": []deb.ExtractInfo{{
+			"/missing-file": {{
 				Path: "/missing-file",
 			}},
 		},
@@ -252,7 +252,7 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/missing-dir/": []deb.ExtractInfo{{
+			"/missing-dir/": {{
 				Path: "/missing-dir/",
 			}},
 		},
@@ -263,7 +263,7 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/missing-dir/**": []deb.ExtractInfo{{
+			"/missing-dir/**": {{
 				Path: "/missing-dir/**",
 			}},
 		},
@@ -274,10 +274,10 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/missing-file": []deb.ExtractInfo{{
+			"/missing-file": {{
 				Path: "missing-file",
 			}},
-			"/missing-dir/": []deb.ExtractInfo{{
+			"/missing-dir/": {{
 				Path: "/missing-dir/",
 			}},
 		},
@@ -288,14 +288,14 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/": []deb.ExtractInfo{{
+			"/dir/": {{
 				Path: "/dir/",
 			}},
-			"/dir/optional": []deb.ExtractInfo{{
+			"/dir/optional": {{
 				Path:     "/other-dir/foo",
 				Optional: true,
 			}},
-			"/optional-dir/": []deb.ExtractInfo{{
+			"/optional-dir/": {{
 				Path:     "/foo/optional-dir/",
 				Optional: true,
 			}},
@@ -310,7 +310,7 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/missing-file": []deb.ExtractInfo{{
+			"/dir/missing-file": {{
 				Path:     "/dir/optional",
 				Optional: true,
 			}, {
@@ -323,13 +323,13 @@ var extractTests = []extractTest{{
 }, {
 	summary: "Extract non-ASCII path and preserve parent directories permissions",
 	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
-		testutil.Dir(0755, "./"),
-		testutil.Dir(0766, "./日本/"),
-		testutil.Reg(0644, "./日本/語", "whatever"),
+		testutil.Dir(0o755, "./"),
+		testutil.Dir(0o766, "./日本/"),
+		testutil.Reg(0o644, "./日本/語", "whatever"),
 	}),
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/日本/語": []deb.ExtractInfo{{
+			"/日本/語": {{
 				Path: "/日本/語",
 			}},
 		},
@@ -344,11 +344,11 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/": []deb.ExtractInfo{{
+			"/dir/": {{
 				Path: "/dir/",
-				Mode: 0777,
+				Mode: 0o777,
 			}},
-			"/d**": []deb.ExtractInfo{{
+			"/d**": {{
 				Path: "/d**",
 			}},
 		},
@@ -357,13 +357,13 @@ var extractTests = []extractTest{{
 }, {
 	summary: "Single hard link entry can be extracted with the content entry",
 	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
-		testutil.Dir(0755, "./"),
-		testutil.Reg(0644, "./file", "text for file"),
-		testutil.Hrd(0644, "./hardlink", "./file"),
+		testutil.Dir(0o755, "./"),
+		testutil.Reg(0o644, "./file", "text for file"),
+		testutil.Hrd(0o644, "./hardlink", "./file"),
 	}),
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/**": []deb.ExtractInfo{{
+			"/**": {{
 				Path: "/**",
 			}},
 		},
@@ -376,13 +376,13 @@ var extractTests = []extractTest{{
 }, {
 	summary: "Single hard link entry can be extracted without the content entry",
 	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
-		testutil.Dir(0755, "./"),
-		testutil.Reg(0644, "./file", "text for file"),
-		testutil.Hrd(0644, "./hardlink", "./file"),
+		testutil.Dir(0o755, "./"),
+		testutil.Reg(0o644, "./file", "text for file"),
+		testutil.Hrd(0o644, "./hardlink", "./file"),
 	}),
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/hardlink": []deb.ExtractInfo{{
+			"/hardlink": {{
 				Path: "/hardlink",
 			}},
 		},
@@ -394,12 +394,12 @@ var extractTests = []extractTest{{
 }, {
 	summary: "Dangling hard link",
 	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
-		testutil.Dir(0755, "./"),
-		testutil.Hrd(0644, "./hardlink", "./non-existing-target"),
+		testutil.Dir(0o755, "./"),
+		testutil.Hrd(0o644, "./hardlink", "./non-existing-target"),
 	}),
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/hardlink": []deb.ExtractInfo{{
+			"/hardlink": {{
 				Path: "/hardlink",
 			}},
 		},
@@ -408,13 +408,13 @@ var extractTests = []extractTest{{
 }, {
 	summary: "Multiple dangling hard links",
 	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
-		testutil.Dir(0755, "./"),
-		testutil.Hrd(0644, "./hardlink1", "./non-existing-target"),
-		testutil.Hrd(0644, "./hardlink2", "./non-existing-target"),
+		testutil.Dir(0o755, "./"),
+		testutil.Hrd(0o644, "./hardlink1", "./non-existing-target"),
+		testutil.Hrd(0o644, "./hardlink2", "./non-existing-target"),
 	}),
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/**": []deb.ExtractInfo{{
+			"/**": {{
 				Path: "/**",
 			}},
 		},
@@ -423,13 +423,13 @@ var extractTests = []extractTest{{
 }, {
 	summary: "Hard link does not follow the symlink",
 	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
-		testutil.Dir(0755, "./"),
-		testutil.Lnk(0644, "./symlink", "./file"),
-		testutil.Hrd(0644, "./hardlink", "./symlink"),
+		testutil.Dir(0o755, "./"),
+		testutil.Lnk(0o644, "./symlink", "./file"),
+		testutil.Hrd(0o644, "./hardlink", "./symlink"),
 	}),
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/**": []deb.ExtractInfo{{
+			"/**": {{
 				Path: "/**",
 			}},
 		},
@@ -444,14 +444,14 @@ var extractTests = []extractTest{{
 	pkgdata: testutil.PackageData["test-package"],
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/": []deb.ExtractInfo{{
+			"/dir/": {{
 				Path: "/dir/",
-				Mode: 0777,
+				Mode: 0o777,
 			}},
 		},
 	},
 	hackopt: func(c *C, o *deb.ExtractOptions) {
-		err := os.Mkdir(path.Join(o.TargetDir, "/dir"), 0666)
+		err := os.Mkdir(path.Join(o.TargetDir, "/dir"), 0o666)
 		c.Assert(err, IsNil)
 	},
 	result: map[string]string{
@@ -543,54 +543,54 @@ var extractCreateCallbackTests = []struct {
 }{{
 	summary: "Create is called with the set of ExtractInfo(s) that match the file",
 	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
-		testutil.Dir(0755, "./"),
-		testutil.Dir(0766, "./dir/"),
-		testutil.Reg(0644, "./dir/file", "whatever"),
+		testutil.Dir(0o755, "./"),
+		testutil.Dir(0o766, "./dir/"),
+		testutil.Reg(0o644, "./dir/file", "whatever"),
 	}),
 	options: deb.ExtractOptions{
 		Extract: map[string][]deb.ExtractInfo{
-			"/dir/": []deb.ExtractInfo{{
+			"/dir/": {{
 				Path: "/dir/",
 			}},
-			"/d**": []deb.ExtractInfo{{
+			"/d**": {{
 				Path: "/d**",
 			}},
-			"/d?r/": []deb.ExtractInfo{{
+			"/d?r/": {{
 				Path: "/d?r/",
 			}},
-			"/dir/file": []deb.ExtractInfo{{
+			"/dir/file": {{
 				Path: "/dir/file",
 			}, {
 				Path: "/dir/file-cpy",
 			}},
-			"/foo/": []deb.ExtractInfo{{
+			"/foo/": {{
 				Path:     "/foo/",
 				Optional: true,
 			}},
 		},
 	},
 	calls: map[string][]deb.ExtractInfo{
-		"/dir/": []deb.ExtractInfo{
-			deb.ExtractInfo{
+		"/dir/": {
+			{
 				Path: "/d**",
 			},
-			deb.ExtractInfo{
+			{
 				Path: "/d?r/",
 			},
-			deb.ExtractInfo{
+			{
 				Path: "/dir/",
 			},
 		},
-		"/dir/file": []deb.ExtractInfo{
-			deb.ExtractInfo{
+		"/dir/file": {
+			{
 				Path: "/d**",
 			},
-			deb.ExtractInfo{
+			{
 				Path: "/dir/file",
 			},
 		},
-		"/dir/file-cpy": []deb.ExtractInfo{
-			deb.ExtractInfo{
+		"/dir/file-cpy": {
+			{
 				Path: "/dir/file-cpy",
 			},
 		},

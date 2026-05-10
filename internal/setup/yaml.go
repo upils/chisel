@@ -120,8 +120,10 @@ func (es yamlEssentialListMap) MarshalYAML() (any, error) {
 	return es.Values, nil
 }
 
-var _ yaml.Marshaler = yamlEssentialListMap{}
-var _ yaml.Unmarshaler = (*yamlEssentialListMap)(nil)
+var (
+	_ yaml.Marshaler   = yamlEssentialListMap{}
+	_ yaml.Unmarshaler = (*yamlEssentialListMap)(nil)
+)
 
 type yamlPath struct {
 	Dir      bool         `yaml:"make,omitempty"`
@@ -172,8 +174,10 @@ func (yn yamlRawNode) IsZero() bool {
 	return !yn.Set
 }
 
-var _ yaml.Marshaler = yamlRawNode{}
-var _ yaml.Unmarshaler = (*yamlRawNode)(nil)
+var (
+	_ yaml.Marshaler   = yamlRawNode{}
+	_ yaml.Unmarshaler = (*yamlRawNode)(nil)
+)
 
 // SameContent returns whether the path has the same content properties as some
 // other path. In other words, the resulting file/dir entry is the same. The
@@ -519,8 +523,6 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 	}
 
 	pkg.Archive = yamlPkg.Archive
-	pkg.Track = yamlPkg.Track
-	pkg.Risk = yamlPkg.Risk
 	zeroPath := yamlPath{}
 	for sliceName, yamlSlice := range yamlPkg.Slices {
 		match := apacheutil.SnameExp.FindStringSubmatch(sliceName)
@@ -558,7 +560,7 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 			if !path.IsAbs(contPath) || path.Clean(contPath) != comparePath {
 				return nil, fmt.Errorf("slice %s_%s has invalid content path: %s", pkgName, sliceName, contPath)
 			}
-			var kinds = make([]PathKind, 0, 3)
+			kinds := make([]PathKind, 0, 3)
 			var info string
 			var mode uint
 			var mutable bool

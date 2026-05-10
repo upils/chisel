@@ -27,7 +27,7 @@ var bulkClient = &http.Client{
 	Timeout: 5 * time.Minute,
 }
 
-const baseURL = "https://codeload.github.com/canonical/chisel-releases/tar.gz/refs/heads/"
+const baseURL = "https://codeload.github.com/upils/chisel-releases/tar.gz/refs/heads/"
 
 func FetchRelease(options *FetchOptions) (*Release, error) {
 	logf("Consulting release repository...")
