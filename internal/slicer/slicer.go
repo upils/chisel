@@ -27,11 +27,12 @@ import (
 const manifestMode fs.FileMode = 0o644
 
 type RunOptions struct {
-	Selection *setup.Selection
-	Archives  map[string]archive.Archive
-	BinSource bins.Source
-	TargetDir string
-	Arch      string
+	Selection   *setup.Selection
+	Archives    map[string]archive.Archive
+	BinSource   bins.Source
+	BinVersions map[string]string
+	TargetDir   string
+	Arch        string
 }
 
 type pathData struct {
@@ -170,7 +171,14 @@ func Run(options *RunOptions) error {
 		}
 		if bins.IsBinPackage(slice.Package) && options.BinSource != nil {
 			pkg := options.Selection.Release.Packages[slice.Package]
-			track := pkg.DefaultTrack
+			version := options.BinVersions[slice.Package]
+			if version == "" {
+				version = pkg.DefaultTrack
+			}
+			if version == "" {
+				return fmt.Errorf("no version specified for bin package %q (use =<version> or set default-track)", slice.Package)
+			}
+			track := version + "-" + options.Selection.Release.Release
 			reader, info, err := options.BinSource.Fetch(slice.Package, track, "stable")
 			if err != nil {
 				return err

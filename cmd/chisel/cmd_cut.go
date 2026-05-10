@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jessevdk/go-flags"
@@ -53,10 +54,28 @@ func (cmd *cmdCut) Execute(args []string) error {
 	}
 
 	sliceKeys := make([]setup.SliceKey, len(cmd.Positional.SliceRefs))
+	binVersions := make(map[string]string)
 	for i, sliceRef := range cmd.Positional.SliceRefs {
+		version := ""
+		if j := strings.LastIndex(sliceRef, "="); j >= 0 {
+			version = sliceRef[j+1:]
+			sliceRef = sliceRef[:j]
+			if version == "" {
+				return fmt.Errorf("invalid slice reference with empty version: %q", cmd.Positional.SliceRefs[i])
+			}
+		}
 		sliceKey, err := setup.ParseSliceKey(sliceRef)
 		if err != nil {
 			return err
+		}
+		if version != "" {
+			if !bins.IsBinPackage(sliceKey.Package) {
+				return fmt.Errorf("version can only be specified for bin packages: %q", cmd.Positional.SliceRefs[i])
+			}
+			if prev, ok := binVersions[sliceKey.Package]; ok && prev != version {
+				return fmt.Errorf("conflicting versions for package %q: %q and %q", sliceKey.Package, prev, version)
+			}
+			binVersions[sliceKey.Package] = version
 		}
 		sliceKeys[i] = sliceKey
 	}
@@ -141,11 +160,12 @@ func (cmd *cmdCut) Execute(args []string) error {
 	}
 
 	err = slicer.Run(&slicer.RunOptions{
-		Selection: selection,
-		Archives:  archives,
-		BinSource: binSource,
-		TargetDir: cmd.RootDir,
-		Arch:      cmd.Arch,
+		Selection:   selection,
+		Archives:    archives,
+		BinSource:   binSource,
+		BinVersions: binVersions,
+		TargetDir:   cmd.RootDir,
+		Arch:        cmd.Arch,
 	})
 	return err
 }

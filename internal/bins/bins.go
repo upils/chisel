@@ -240,11 +240,11 @@ func (s *binSource) Exists(pkg, track, risk string) bool {
 }
 
 func (s *binSource) Fetch(pkg, track, risk string) (io.ReadSeekCloser, *BinPackageInfo, error) {
+	logf("Fetching %s=%s/%s ...", pkg, track, risk)
 	name, err := BinName(pkg)
 	if err != nil {
 		return nil, nil, err
 	}
-	logf("Fetching bin %s info...", name)
 
 	resp, err := fetchBinInfo(name, s.options.Arch)
 	if err != nil {

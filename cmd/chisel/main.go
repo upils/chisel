@@ -13,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/canonical/chisel/internal/archive"
+	"github.com/canonical/chisel/internal/bins"
 	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
@@ -324,6 +325,7 @@ func (e *exitStatus) Error() string {
 
 func run() error {
 	archive.SetLogger(log.Default())
+	bins.SetLogger(log.Default())
 	deb.SetLogger(log.Default())
 	setup.SetLogger(log.Default())
 	slicer.SetLogger(log.Default())
