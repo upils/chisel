@@ -20,6 +20,7 @@ import (
 // distribution version.
 type Release struct {
 	Format      string
+	Release     string
 	Path        string
 	Packages    map[string]*Package
 	Archives    map[string]*Archive
@@ -51,12 +52,11 @@ type Archive struct {
 
 // Package holds a collection of slices that represent parts of themselves.
 type Package struct {
-	Name    string
-	Path    string
-	Archive string
-	Track   string
-	Risk    string
-	Slices  map[string]*Slice
+	Name         string
+	Path         string
+	Archive      string
+	DefaultTrack string
+	Slices       map[string]*Slice
 }
 
 // Slice holds the details about a package slice.
@@ -70,7 +70,13 @@ type Slice struct {
 }
 
 type EssentialInfo struct {
-	Arch []string
+	Arch     []string
+	Channels []Channel
+}
+
+type Channel struct {
+	Track string
+	Risk  string
 }
 
 type SliceScripts struct {
@@ -113,6 +119,7 @@ type PathInfo struct {
 	Mutable  bool
 	Until    PathUntil
 	Arch     []string
+	Channels []Channel
 	Generate GenerateKind
 	Prefer   string
 }
@@ -331,22 +338,6 @@ func (r *Release) validate() error {
 
 	// Check that archives pinned in packages are defined.
 	for _, pkg := range r.Packages {
-		isBin := strings.HasPrefix(pkg.Name, "bin-")
-		if isBin {
-			if pkg.Track == "" {
-				return fmt.Errorf("%s: bin package %q must define a track", pkg.Path, pkg.Name)
-			}
-			if pkg.Risk == "" {
-				pkg.Risk = "stable"
-			}
-		} else {
-			if pkg.Track != "" {
-				return fmt.Errorf("%s: track is only supported for bin packages", pkg.Path)
-			}
-			if pkg.Risk != "" {
-				return fmt.Errorf("%s: risk is only supported for bin packages", pkg.Path)
-			}
-		}
 		if pkg.Archive == "" {
 			continue
 		}

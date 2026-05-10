@@ -27,6 +27,7 @@ var _ yaml.Marshaler = (*Package)(nil)
 
 type yamlRelease struct {
 	Format      string                 `yaml:"format"`
+	Release     string                 `yaml:"release"`
 	Maintenance yamlMaintenance        `yaml:"maintenance"`
 	Archives    map[string]yamlArchive `yaml:"archives"`
 	PubKeys     map[string]yamlPubKey  `yaml:"public-keys"`
@@ -53,10 +54,9 @@ type yamlArchive struct {
 }
 
 type yamlPackage struct {
-	Name    string `yaml:"package"`
-	Archive string `yaml:"archive,omitempty"`
-	Track   string `yaml:"track,omitempty"`
-	Risk    string `yaml:"risk,omitempty"`
+	Name         string      `yaml:"package"`
+	Archive      string      `yaml:"archive,omitempty"`
+	DefaultTrack yamlRawNode `yaml:"default_track,omitempty"`
 	// For backwards-compatibility reasons with v1 and v2, essential needs
 	// custom logic to be parsed. See [yamlEssentialListMap].
 	Essential yamlEssentialListMap `yaml:"essential,omitempty"`
@@ -132,6 +132,7 @@ type yamlPath struct {
 	Mutable  bool         `yaml:"mutable,omitempty"`
 	Until    PathUntil    `yaml:"until,omitempty"`
 	Arch     yamlArch     `yaml:"arch,omitempty"`
+	Channel  yamlRawNode  `yaml:"channel,omitempty"`
 	Generate GenerateKind `yaml:"generate,omitempty"`
 	Prefer   string       `yaml:"prefer,omitempty"`
 }
@@ -148,6 +149,31 @@ func (yp *yamlPath) MarshalYAML() (any, error) {
 }
 
 var _ yaml.Marshaler = (*yamlPath)(nil)
+
+type yamlRawNode struct {
+	Node yaml.Node
+	Set  bool
+}
+
+func (yn *yamlRawNode) UnmarshalYAML(value *yaml.Node) error {
+	yn.Node = *value
+	yn.Set = true
+	return nil
+}
+
+func (yn yamlRawNode) MarshalYAML() (any, error) {
+	if !yn.Set {
+		return nil, nil
+	}
+	return &yn.Node, nil
+}
+
+func (yn yamlRawNode) IsZero() bool {
+	return !yn.Set
+}
+
+var _ yaml.Marshaler = yamlRawNode{}
+var _ yaml.Unmarshaler = (*yamlRawNode)(nil)
 
 // SameContent returns whether the path has the same content properties as some
 // other path. In other words, the resulting file/dir entry is the same. The
@@ -225,7 +251,8 @@ type yamlPubKey struct {
 }
 
 type yamlEssential struct {
-	Arch yamlArch `yaml:"arch,omitempty"`
+	Arch    yamlArch    `yaml:"arch,omitempty"`
+	Channel yamlRawNode `yaml:"channel,omitempty"`
 }
 
 func (ye *yamlEssential) MarshalYAML() (any, error) {
@@ -261,6 +288,7 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 		return nil, fmt.Errorf("%s: unknown format %q", fileName, yamlVar.Format)
 	}
 	release.Format = yamlVar.Format
+	release.Release = yamlVar.Release
 
 	if yamlVar.Format != "v1" && len(yamlVar.V2Archives) > 0 {
 		return nil, fmt.Errorf("%s: v2-archives is obsolete since format v2", fileName)
@@ -455,6 +483,14 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 	if yamlPkg.Name != pkg.Name {
 		return nil, fmt.Errorf("%s: filename and 'package' field (%q) disagree", pkgPath, yamlPkg.Name)
 	}
+	isBinPackage := strings.HasPrefix(pkg.Name, "bin-")
+	if isBinPackage {
+		defaultTrack, err := parseDefaultTrack(yamlPkg.DefaultTrack)
+		if err != nil {
+			return nil, fmt.Errorf("cannot parse package %q: %v", pkgName, err)
+		}
+		pkg.DefaultTrack = defaultTrack
+	}
 
 	if format == "v1" || format == "v2" {
 		if yamlPkg.Essential.style != unsetEssential && yamlPkg.Essential.style != listEssential {
@@ -505,7 +541,7 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 				Mutate: yamlSlice.Mutate,
 			},
 		}
-		err := parseEssentials(&yamlPkg, &yamlSlice, pkgPath, slice)
+		err := parseEssentials(&yamlPkg, &yamlSlice, pkgPath, slice, isBinPackage)
 		if err != nil {
 			return nil, err
 		}
@@ -528,6 +564,7 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 			var mutable bool
 			var until PathUntil
 			var arch []string
+			var channels []Channel
 			var generate GenerateKind
 			var prefer string
 			if yamlPath != nil && yamlPath.Generate != "" {
@@ -589,6 +626,12 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 						return nil, fmt.Errorf("slice %s_%s has invalid 'arch' for path %s: %q", pkgName, sliceName, contPath, s)
 					}
 				}
+				if isBinPackage {
+					channels, err = parseChannels(yamlPath.Channel)
+					if err != nil {
+						return nil, fmt.Errorf("slice %s_%s has invalid 'channel' for path %s: %v", pkgName, sliceName, contPath, err)
+					}
+				}
 			}
 			if prefer == pkgName {
 				return nil, fmt.Errorf("slice %s_%s cannot 'prefer' its own package for path %s", pkgName, sliceName, contPath)
@@ -613,6 +656,7 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 				Mutable:  mutable,
 				Until:    until,
 				Arch:     arch,
+				Channels: channels,
 				Generate: generate,
 				Prefer:   prefer,
 			}
@@ -622,6 +666,64 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 	}
 
 	return &pkg, nil
+}
+
+func parseDefaultTrack(value yamlRawNode) (string, error) {
+	if !value.Set {
+		return "", fmt.Errorf("default_track is required")
+	}
+	if value.Node.Kind != yaml.ScalarNode || value.Node.Tag != "!!str" || value.Node.Value == "" || strings.Contains(value.Node.Value, "/") {
+		return "", fmt.Errorf("default_track must be a non-empty track name without /")
+	}
+	return value.Node.Value, nil
+}
+
+func parseChannels(value yamlRawNode) ([]Channel, error) {
+	if !value.Set {
+		return nil, nil
+	}
+	if value.Node.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("must be a non-empty list")
+	}
+	if len(value.Node.Content) == 0 {
+		return nil, fmt.Errorf("must be a non-empty list")
+	}
+	channels := make([]Channel, 0, len(value.Node.Content))
+	for _, item := range value.Node.Content {
+		if item.Kind != yaml.ScalarNode || item.Tag != "!!str" {
+			return nil, fmt.Errorf("entries must be strings in <track>/<risk> form")
+		}
+		track, risk, ok := strings.Cut(item.Value, "/")
+		if !ok || track == "" || risk == "" || strings.Contains(risk, "/") {
+			return nil, fmt.Errorf("%q must be in <track>/<risk> form", item.Value)
+		}
+		switch risk {
+		case "stable", "candidate", "beta", "edge":
+		default:
+			return nil, fmt.Errorf("%q has invalid risk %q", item.Value, risk)
+		}
+		channels = append(channels, Channel{Track: track, Risk: risk})
+	}
+	return channels, nil
+}
+
+func channelsToYAML(channels []Channel) yamlRawNode {
+	if len(channels) == 0 {
+		return yamlRawNode{}
+	}
+	node := &yaml.Node{
+		Kind:  yaml.SequenceNode,
+		Style: yaml.FlowStyle,
+	}
+	for _, channel := range channels {
+		node.Content = append(node.Content, &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Tag:   "!!str",
+			Style: yaml.DoubleQuotedStyle,
+			Value: channel.Track + "/" + channel.Risk,
+		})
+	}
+	return yamlRawNode{Node: *node, Set: true}
 }
 
 // validateGeneratePath validates that the path follows the following format:
@@ -642,7 +744,7 @@ func validateGeneratePath(path string) (string, error) {
 
 // pathInfoToYAML converts a PathInfo object to a yamlPath object.
 // The returned object takes pointers to the given PathInfo object.
-func pathInfoToYAML(pi *PathInfo) (*yamlPath, error) {
+func pathInfoToYAML(pi *PathInfo, includeChannels bool) (*yamlPath, error) {
 	path := &yamlPath{
 		Mode:     yamlMode(pi.Mode),
 		Mutable:  pi.Mutable,
@@ -665,11 +767,14 @@ func pathInfoToYAML(pi *PathInfo) (*yamlPath, error) {
 	default:
 		return nil, fmt.Errorf("internal error: unrecognised PathInfo type: %s", pi.Kind)
 	}
+	if includeChannels {
+		path.Channel = channelsToYAML(pi.Channels)
+	}
 	return path, nil
 }
 
 // sliceToYAML converts a Slice object to a yamlSlice object.
-func sliceToYAML(s *Slice) (*yamlSlice, error) {
+func sliceToYAML(s *Slice, includeChannels bool) (*yamlSlice, error) {
 	slice := &yamlSlice{
 		Hint:     s.Hint,
 		Contents: make(map[string]*yamlPath, len(s.Contents)),
@@ -679,10 +784,14 @@ func sliceToYAML(s *Slice) (*yamlSlice, error) {
 		},
 	}
 	for key, info := range s.Essential {
-		slice.Essential.Values[key.String()] = &yamlEssential{Arch: yamlArch{info.Arch}}
+		essential := &yamlEssential{Arch: yamlArch{info.Arch}}
+		if includeChannels {
+			essential.Channel = channelsToYAML(info.Channels)
+		}
+		slice.Essential.Values[key.String()] = essential
 	}
 	for path, info := range s.Contents {
-		yamlPath, err := pathInfoToYAML(&info)
+		yamlPath, err := pathInfoToYAML(&info, includeChannels)
 		if err != nil {
 			return nil, err
 		}
@@ -698,8 +807,19 @@ func packageToYAML(p *Package) (*yamlPackage, error) {
 		Archive: p.Archive,
 		Slices:  make(map[string]yamlSlice, len(p.Slices)),
 	}
+	isBinPackage := strings.HasPrefix(p.Name, "bin-")
+	if isBinPackage && p.DefaultTrack != "" {
+		pkg.DefaultTrack = yamlRawNode{
+			Node: yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Tag:   "!!str",
+				Value: p.DefaultTrack,
+			},
+			Set: true,
+		}
+	}
 	for name, slice := range p.Slices {
-		yamlSlice, err := sliceToYAML(slice)
+		yamlSlice, err := sliceToYAML(slice, isBinPackage)
 		if err != nil {
 			return nil, err
 		}
@@ -799,7 +919,7 @@ var defaultMaintenance = map[string]Maintenance{
 // parseEssentials takes into account package-level and slice-level essentials,
 // processes them to check they are valid and not duplicated and, if
 // successful, adds them to slice.
-func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string, slice *Slice) error {
+func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string, slice *Slice, parseChannel bool) error {
 	addPackageEssential := func(refName string, essentialInfo *yamlEssential) error {
 		sliceKey, err := ParseSliceKey(refName)
 		if err != nil {
@@ -816,10 +936,17 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 			slice.Essential = map[SliceKey]EssentialInfo{}
 		}
 		var archList []string
+		var channels []Channel
 		if essentialInfo != nil {
 			archList = essentialInfo.Arch.List
+			if parseChannel {
+				channels, err = parseChannels(essentialInfo.Channel)
+				if err != nil {
+					return fmt.Errorf("package %q has invalid 'channel' for essential %s: %v", yamlPkg.Name, refName, err)
+				}
+			}
 		}
-		slice.Essential[sliceKey] = EssentialInfo{Arch: archList}
+		slice.Essential[sliceKey] = EssentialInfo{Arch: archList, Channels: channels}
 		return nil
 	}
 	addSliceEssential := func(refName string, essentialInfo *yamlEssential) error {
@@ -837,10 +964,17 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 			slice.Essential = map[SliceKey]EssentialInfo{}
 		}
 		var archList []string
+		var channels []Channel
 		if essentialInfo != nil {
 			archList = essentialInfo.Arch.List
+			if parseChannel {
+				channels, err = parseChannels(essentialInfo.Channel)
+				if err != nil {
+					return fmt.Errorf("slice %s has invalid 'channel' for essential %s: %v", slice, refName, err)
+				}
+			}
 		}
-		slice.Essential[sliceKey] = EssentialInfo{Arch: archList}
+		slice.Essential[sliceKey] = EssentialInfo{Arch: archList, Channels: channels}
 		return nil
 	}
 

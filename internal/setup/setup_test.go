@@ -48,6 +48,55 @@ var setupTests = []setupTest{{
 	},
 	relerror: `chisel.yaml: no archives defined`,
 }, {
+	summary: "Top-level release field is parsed when present",
+	input: map[string]string{
+		"chisel.yaml": `
+			format: v1
+			release: 24.04
+			maintenance:
+				standard: 2025-01-01
+				end-of-life: 2100-01-01
+			archives:
+				ubuntu:
+					version: 24.04
+					components: [main]
+					suites: [noble]
+					public-keys: [test-key]
+			public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/mypkg.yaml": `
+			package: mypkg
+		`,
+	},
+	release: &setup.Release{
+		Format:  "v1",
+		Release: "24.04",
+		Archives: map[string]*setup.Archive{
+			"ubuntu": {
+				Name:       "ubuntu",
+				Version:    "24.04",
+				Suites:     []string{"noble"},
+				Components: []string{"main"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+				Maintained: true,
+			},
+		},
+		Packages: map[string]*setup.Package{
+			"mypkg": {
+				Name:   "mypkg",
+				Path:   "slices/mydir/mypkg.yaml",
+				Slices: map[string]*setup.Slice{},
+			},
+		},
+		Maintenance: &setup.Maintenance{
+			Standard:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			EndOfLife: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC),
+		},
+	},
+}, {
 	summary: "Enforce matching filename and package name",
 	input: map[string]string{
 		"slices/mydir/mypkg.yaml": `
@@ -4082,6 +4131,216 @@ func (s *S) TestPackageMarshalYAML(c *C) {
 	}
 }
 
+func (s *S) TestBinPackageChannels(c *C) {
+	input := map[string]string{
+		"chisel.yaml": strings.ReplaceAll(string(testutil.DefaultChiselYaml), "format: v1", "format: v3"),
+		"slices/bin-mypkg.yaml": `
+			package: bin-mypkg
+			default_track: "0.3"
+			essential:
+				bin-mypkg_otherslice: {channel: ["0.3/stable"]}
+			slices:
+				myslice:
+					essential:
+						bin-mypkg_thirdslice: {arch: amd64, channel: ["0.4/beta", "0.4/edge"]}
+					contents:
+						/dir/file: {channel: ["0.3/stable"]}
+						/dir/generated/**: {generate: manifest, channel: ["0.4/candidate"]}
+				otherslice:
+					contents:
+						/dir/other: {}
+				thirdslice:
+					contents:
+						/dir/third: {}
+		`,
+	}
+
+	dir := c.MkDir()
+	for path, data := range input {
+		fpath := filepath.Join(dir, path)
+		err := os.MkdirAll(filepath.Dir(fpath), 0755)
+		c.Assert(err, IsNil)
+		err = os.WriteFile(fpath, testutil.Reindent(data), 0644)
+		c.Assert(err, IsNil)
+	}
+
+	release, err := setup.ReadRelease(dir)
+	c.Assert(err, IsNil)
+
+	pkg := release.Packages["bin-mypkg"]
+	c.Assert(pkg.DefaultTrack, Equals, "0.3")
+
+	myslice := pkg.Slices["myslice"]
+	c.Assert(myslice.Essential[setup.SliceKey{Package: "bin-mypkg", Slice: "otherslice"}].Channels, DeepEquals, []setup.Channel{
+		{Track: "0.3", Risk: "stable"},
+	})
+	c.Assert(myslice.Essential[setup.SliceKey{Package: "bin-mypkg", Slice: "thirdslice"}], DeepEquals, setup.EssentialInfo{
+		Arch: []string{"amd64"},
+		Channels: []setup.Channel{
+			{Track: "0.4", Risk: "beta"},
+			{Track: "0.4", Risk: "edge"},
+		},
+	})
+	c.Assert(myslice.Contents["/dir/file"].Channels, DeepEquals, []setup.Channel{
+		{Track: "0.3", Risk: "stable"},
+	})
+	c.Assert(myslice.Contents["/dir/generated/**"].Channels, DeepEquals, []setup.Channel{
+		{Track: "0.4", Risk: "candidate"},
+	})
+	c.Assert(pkg.Slices["otherslice"].Contents["/dir/other"].Channels, IsNil)
+}
+
+func (s *S) TestBinPackageChannelValidation(c *C) {
+	tests := []struct {
+		summary string
+		path    string
+		yaml    string
+		err     string
+	}{{
+		summary: "missing default_track",
+		path:    "slices/bin-mypkg.yaml",
+		yaml: `
+			package: bin-mypkg
+		`,
+		err: `cannot parse package "bin-mypkg": default_track is required`,
+	}, {
+		summary: "invalid default_track",
+		path:    "slices/bin-mypkg.yaml",
+		yaml: `
+			package: bin-mypkg
+			default_track: "0.3/stable"
+		`,
+		err: `cannot parse package "bin-mypkg": default_track must be a non-empty track name without /`,
+	}, {
+		summary: "channel missing risk",
+		path:    "slices/bin-mypkg.yaml",
+		yaml: `
+			package: bin-mypkg
+			default_track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: ["0.4"]}
+		`,
+		err: `slice bin-mypkg_myslice has invalid 'channel' for path /dir/file: "0.4" must be in <track>/<risk> form`,
+	}, {
+		summary: "channel missing track",
+		path:    "slices/bin-mypkg.yaml",
+		yaml: `
+			package: bin-mypkg
+			default_track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: ["stable"]}
+		`,
+		err: `slice bin-mypkg_myslice has invalid 'channel' for path /dir/file: "stable" must be in <track>/<risk> form`,
+	}, {
+		summary: "channel invalid risk",
+		path:    "slices/bin-mypkg.yaml",
+		yaml: `
+			package: bin-mypkg
+			default_track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: ["0.4/invalid"]}
+		`,
+		err: `slice bin-mypkg_myslice has invalid 'channel' for path /dir/file: "0.4/invalid" has invalid risk "invalid"`,
+	}, {
+		summary: "channel empty list",
+		path:    "slices/bin-mypkg.yaml",
+		yaml: `
+			package: bin-mypkg
+			default_track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: []}
+		`,
+		err: `slice bin-mypkg_myslice has invalid 'channel' for path /dir/file: must be a non-empty list`,
+	}, {
+		summary: "channel scalar",
+		path:    "slices/bin-mypkg.yaml",
+		yaml: `
+			package: bin-mypkg
+			default_track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: "0.3/stable"}
+		`,
+		err: `slice bin-mypkg_myslice has invalid 'channel' for path /dir/file: must be a non-empty list`,
+	}, {
+		summary: "bin filename package mismatch",
+		path:    "slices/bin-mypkg.yaml",
+		yaml: `
+			package: bin-otherpkg
+			default_track: "0.3"
+		`,
+		err: `slices/bin-mypkg.yaml: filename and 'package' field \("bin-otherpkg"\) disagree`,
+	}}
+
+	for _, test := range tests {
+		c.Logf("Summary: %s", test.summary)
+
+		dir := c.MkDir()
+		err := os.WriteFile(filepath.Join(dir, "chisel.yaml"), testutil.Reindent(testutil.DefaultChiselYaml), 0644)
+		c.Assert(err, IsNil)
+		fpath := filepath.Join(dir, test.path)
+		err = os.MkdirAll(filepath.Dir(fpath), 0755)
+		c.Assert(err, IsNil)
+		err = os.WriteFile(fpath, testutil.Reindent(test.yaml), 0644)
+		c.Assert(err, IsNil)
+
+		_, err = setup.ReadRelease(dir)
+		c.Assert(err, ErrorMatches, test.err)
+	}
+}
+
+func (s *S) TestNonBinPackageIgnoresBinFields(c *C) {
+	input := map[string]string{
+		"chisel.yaml": strings.ReplaceAll(string(testutil.DefaultChiselYaml), "format: v1", "format: v3"),
+		"slices/mypkg.yaml": `
+			package: mypkg
+			default_track: ["bad/track"]
+			essential:
+				mypkg_otherslice: {channel: "bad-channel"}
+			slices:
+				myslice:
+					essential:
+						mypkg_thirdslice: {channel: []}
+					contents:
+						/dir/file: {channel: "bad-channel"}
+				otherslice:
+				thirdslice:
+		`,
+	}
+
+	dir := c.MkDir()
+	for path, data := range input {
+		fpath := filepath.Join(dir, path)
+		err := os.MkdirAll(filepath.Dir(fpath), 0755)
+		c.Assert(err, IsNil)
+		err = os.WriteFile(fpath, testutil.Reindent(data), 0644)
+		c.Assert(err, IsNil)
+	}
+
+	release, err := setup.ReadRelease(dir)
+	c.Assert(err, IsNil)
+
+	pkg := release.Packages["mypkg"]
+	c.Assert(pkg.DefaultTrack, Equals, "")
+	c.Assert(pkg.Slices["myslice"].Essential[setup.SliceKey{Package: "mypkg", Slice: "otherslice"}].Channels, IsNil)
+	c.Assert(pkg.Slices["myslice"].Essential[setup.SliceKey{Package: "mypkg", Slice: "thirdslice"}].Channels, IsNil)
+	c.Assert(pkg.Slices["myslice"].Contents["/dir/file"].Channels, IsNil)
+
+	data, err := yaml.Marshal(pkg)
+	c.Assert(err, IsNil)
+	c.Assert(string(data), Not(Matches), `(?s).*default_track.*`)
+	c.Assert(string(data), Not(Matches), `(?s).*channel.*`)
+}
+
 func (s *S) TestPackageYAMLFormat(c *C) {
 	var tests = []struct {
 		summary  string
@@ -4230,6 +4489,38 @@ func (s *S) TestPackageYAMLFormat(c *C) {
 					two:
 						essential:
 							mypkg_three: {arch: i386}
+			`,
+		},
+	}, {
+		summary: "Bin package default track and channels",
+		input: map[string]string{
+			"chisel.yaml": strings.ReplaceAll(testutil.DefaultChiselYaml, "format: v1", "format: v3"),
+			"slices/bin-mypkg.yaml": `
+				package: bin-mypkg
+				default_track: "0.3"
+				slices:
+					myslice:
+						essential:
+							bin-mypkg_helpers: {channel: ["0.4/beta", "0.4/edge"]}
+						contents:
+							/dir/file: {channel: ["0.3/stable"]}
+							/dir/generated/**: {generate: manifest, channel: ["0.4/candidate"]}
+					helpers:
+			`,
+		},
+		expected: map[string]string{
+			"chisel.yaml": strings.ReplaceAll(testutil.DefaultChiselYaml, "format: v1", "format: v3"),
+			"slices/bin-mypkg.yaml": `
+				package: bin-mypkg
+				default_track: "0.3"
+				slices:
+					helpers: {}
+					myslice:
+						essential:
+							bin-mypkg_helpers: {channel: ["0.4/beta", "0.4/edge"]}
+						contents:
+							/dir/file: {channel: ["0.3/stable"]}
+							/dir/generated/**: {channel: ["0.4/candidate"], generate: manifest}
 			`,
 		},
 	}}
