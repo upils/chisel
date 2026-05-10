@@ -274,7 +274,7 @@ To find more examples of real slice definitions files (and contribute your own),
 please go to <https://github.com/canonical/chisel-releases>.
 
 Packages whose YAML filename and `package` name both start with `bin-` may
-define `default_track` at package level and `channel` lists on `contents` or
+define `default-track` at package level and `channel` lists on `contents` or
 `essential` entries. Each channel must use `<track>/<risk>`, where risk is one
 of `stable`, `candidate`, `beta`, or `edge`. Missing `channel` means the entry
 applies to all channels. For packages without the `bin-` prefix these fields are
@@ -282,7 +282,7 @@ ignored.
 
 ```yaml
 package: bin-mypkg
-default_track: "latest"
+default-track: "latest"
 
 slices:
     bins:

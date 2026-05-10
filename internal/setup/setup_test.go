@@ -4136,7 +4136,7 @@ func (s *S) TestBinPackageChannels(c *C) {
 		"chisel.yaml": strings.ReplaceAll(string(testutil.DefaultChiselYaml), "format: v1", "format: v3"),
 		"slices/bin-mypkg.yaml": `
 			package: bin-mypkg
-			default_track: "0.3"
+			default-track: "0.3"
 			essential:
 				bin-mypkg_otherslice: {channel: ["0.3/stable"]}
 			slices:
@@ -4197,26 +4197,26 @@ func (s *S) TestBinPackageChannelValidation(c *C) {
 		yaml    string
 		err     string
 	}{{
-		summary: "missing default_track",
+		summary: "missing default-track",
 		path:    "slices/bin-mypkg.yaml",
 		yaml: `
 			package: bin-mypkg
 		`,
-		err: `cannot parse package "bin-mypkg": default_track is required`,
+		err: `cannot parse package "bin-mypkg": default-track is required`,
 	}, {
-		summary: "invalid default_track",
+		summary: "invalid default-track",
 		path:    "slices/bin-mypkg.yaml",
 		yaml: `
 			package: bin-mypkg
-			default_track: "0.3/stable"
+			default-track: "0.3/stable"
 		`,
-		err: `cannot parse package "bin-mypkg": default_track must be a non-empty track name without /`,
+		err: `cannot parse package "bin-mypkg": default-track must be a non-empty track name without /`,
 	}, {
 		summary: "channel missing risk",
 		path:    "slices/bin-mypkg.yaml",
 		yaml: `
 			package: bin-mypkg
-			default_track: "0.3"
+			default-track: "0.3"
 			slices:
 				myslice:
 					contents:
@@ -4228,7 +4228,7 @@ func (s *S) TestBinPackageChannelValidation(c *C) {
 		path:    "slices/bin-mypkg.yaml",
 		yaml: `
 			package: bin-mypkg
-			default_track: "0.3"
+			default-track: "0.3"
 			slices:
 				myslice:
 					contents:
@@ -4240,7 +4240,7 @@ func (s *S) TestBinPackageChannelValidation(c *C) {
 		path:    "slices/bin-mypkg.yaml",
 		yaml: `
 			package: bin-mypkg
-			default_track: "0.3"
+			default-track: "0.3"
 			slices:
 				myslice:
 					contents:
@@ -4252,7 +4252,7 @@ func (s *S) TestBinPackageChannelValidation(c *C) {
 		path:    "slices/bin-mypkg.yaml",
 		yaml: `
 			package: bin-mypkg
-			default_track: "0.3"
+			default-track: "0.3"
 			slices:
 				myslice:
 					contents:
@@ -4264,7 +4264,7 @@ func (s *S) TestBinPackageChannelValidation(c *C) {
 		path:    "slices/bin-mypkg.yaml",
 		yaml: `
 			package: bin-mypkg
-			default_track: "0.3"
+			default-track: "0.3"
 			slices:
 				myslice:
 					contents:
@@ -4276,7 +4276,7 @@ func (s *S) TestBinPackageChannelValidation(c *C) {
 		path:    "slices/bin-mypkg.yaml",
 		yaml: `
 			package: bin-otherpkg
-			default_track: "0.3"
+			default-track: "0.3"
 		`,
 		err: `slices/bin-mypkg.yaml: filename and 'package' field \("bin-otherpkg"\) disagree`,
 	}}
@@ -4303,7 +4303,7 @@ func (s *S) TestNonBinPackageIgnoresBinFields(c *C) {
 		"chisel.yaml": strings.ReplaceAll(string(testutil.DefaultChiselYaml), "format: v1", "format: v3"),
 		"slices/mypkg.yaml": `
 			package: mypkg
-			default_track: ["bad/track"]
+			default-track: ["bad/track"]
 			essential:
 				mypkg_otherslice: {channel: "bad-channel"}
 			slices:
@@ -4337,7 +4337,7 @@ func (s *S) TestNonBinPackageIgnoresBinFields(c *C) {
 
 	data, err := yaml.Marshal(pkg)
 	c.Assert(err, IsNil)
-	c.Assert(string(data), Not(Matches), `(?s).*default_track.*`)
+	c.Assert(string(data), Not(Matches), `(?s).*default-track.*`)
 	c.Assert(string(data), Not(Matches), `(?s).*channel.*`)
 }
 
@@ -4497,7 +4497,7 @@ func (s *S) TestPackageYAMLFormat(c *C) {
 			"chisel.yaml": strings.ReplaceAll(testutil.DefaultChiselYaml, "format: v1", "format: v3"),
 			"slices/bin-mypkg.yaml": `
 				package: bin-mypkg
-				default_track: "0.3"
+				default-track: "0.3"
 				slices:
 					myslice:
 						essential:
@@ -4512,7 +4512,7 @@ func (s *S) TestPackageYAMLFormat(c *C) {
 			"chisel.yaml": strings.ReplaceAll(testutil.DefaultChiselYaml, "format: v1", "format: v3"),
 			"slices/bin-mypkg.yaml": `
 				package: bin-mypkg
-				default_track: "0.3"
+				default-track: "0.3"
 				slices:
 					helpers: {}
 					myslice:

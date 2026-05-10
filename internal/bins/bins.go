@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/canonical/chisel/internal/cache"
+	"github.com/canonical/chisel/internal/deb"
 )
 
 const binsAPIBase = "https://api.staging.snapcraft.io/v2/bins"
@@ -54,8 +55,14 @@ var bulkDo = bulkClient.Do
 
 // Open creates a new bin source with the given options.
 func Open(options *Options) (Source, error) {
+	var err error
 	if options.Arch == "" {
-		return nil, fmt.Errorf("bins options missing arch")
+		options.Arch, err = deb.InferArch()
+	} else {
+		err = deb.ValidateArch(options.Arch)
+	}
+	if err != nil {
+		return nil, err
 	}
 	return &binSource{
 		options: *options,

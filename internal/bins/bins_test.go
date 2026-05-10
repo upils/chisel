@@ -132,11 +132,20 @@ func (s *S) TestBinName(c *C) {
 	}
 }
 
-func (s *S) TestOpenMissingArch(c *C) {
-	_, err := bins.Open(&bins.Options{
+func (s *S) TestOpenInferArch(c *C) {
+	src, err := bins.Open(&bins.Options{
 		CacheDir: c.MkDir(),
 	})
-	c.Assert(err, ErrorMatches, "bins options missing arch")
+	c.Assert(err, IsNil)
+	c.Assert(src, NotNil)
+}
+
+func (s *S) TestOpenInvalidArch(c *C) {
+	_, err := bins.Open(&bins.Options{
+		Arch:     "foo",
+		CacheDir: c.MkDir(),
+	})
+	c.Assert(err, ErrorMatches, "invalid package architecture: foo")
 }
 
 func (s *S) TestOpenValid(c *C) {

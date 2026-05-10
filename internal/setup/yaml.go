@@ -56,7 +56,7 @@ type yamlArchive struct {
 type yamlPackage struct {
 	Name         string      `yaml:"package"`
 	Archive      string      `yaml:"archive,omitempty"`
-	DefaultTrack yamlRawNode `yaml:"default_track,omitempty"`
+	DefaultTrack yamlRawNode `yaml:"default-track,omitempty"`
 	// For backwards-compatibility reasons with v1 and v2, essential needs
 	// custom logic to be parsed. See [yamlEssentialListMap].
 	Essential yamlEssentialListMap `yaml:"essential,omitempty"`
@@ -672,10 +672,10 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 
 func parseDefaultTrack(value yamlRawNode) (string, error) {
 	if !value.Set {
-		return "", fmt.Errorf("default_track is required")
+		return "", fmt.Errorf("default-track is required")
 	}
 	if value.Node.Kind != yaml.ScalarNode || value.Node.Tag != "!!str" || value.Node.Value == "" || strings.Contains(value.Node.Value, "/") {
-		return "", fmt.Errorf("default_track must be a non-empty track name without /")
+		return "", fmt.Errorf("default-track must be a non-empty track name without /")
 	}
 	return value.Node.Value, nil
 }
