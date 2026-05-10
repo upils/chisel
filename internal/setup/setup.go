@@ -54,6 +54,8 @@ type Package struct {
 	Name    string
 	Path    string
 	Archive string
+	Track   string
+	Risk    string
 	Slices  map[string]*Slice
 }
 
@@ -329,6 +331,22 @@ func (r *Release) validate() error {
 
 	// Check that archives pinned in packages are defined.
 	for _, pkg := range r.Packages {
+		isBin := strings.HasPrefix(pkg.Name, "bin-")
+		if isBin {
+			if pkg.Track == "" {
+				return fmt.Errorf("%s: bin package %q must define a track", pkg.Path, pkg.Name)
+			}
+			if pkg.Risk == "" {
+				pkg.Risk = "stable"
+			}
+		} else {
+			if pkg.Track != "" {
+				return fmt.Errorf("%s: track is only supported for bin packages", pkg.Path)
+			}
+			if pkg.Risk != "" {
+				return fmt.Errorf("%s: risk is only supported for bin packages", pkg.Path)
+			}
+		}
 		if pkg.Archive == "" {
 			continue
 		}

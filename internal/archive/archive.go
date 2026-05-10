@@ -30,6 +30,7 @@ type PackageInfo struct {
 	Version string
 	Arch    string
 	SHA256  string
+	SHA3384 string
 }
 
 type Options struct {

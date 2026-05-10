@@ -55,6 +55,8 @@ type yamlArchive struct {
 type yamlPackage struct {
 	Name    string `yaml:"package"`
 	Archive string `yaml:"archive,omitempty"`
+	Track   string `yaml:"track,omitempty"`
+	Risk    string `yaml:"risk,omitempty"`
 	// For backwards-compatibility reasons with v1 and v2, essential needs
 	// custom logic to be parsed. See [yamlEssentialListMap].
 	Essential yamlEssentialListMap `yaml:"essential,omitempty"`
@@ -481,6 +483,8 @@ func parsePackage(format, pkgName, pkgPath string, data []byte) (*Package, error
 	}
 
 	pkg.Archive = yamlPkg.Archive
+	pkg.Track = yamlPkg.Track
+	pkg.Risk = yamlPkg.Risk
 	zeroPath := yamlPath{}
 	for sliceName, yamlSlice := range yamlPkg.Slices {
 		match := apacheutil.SnameExp.FindStringSubmatch(sliceName)

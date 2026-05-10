@@ -16,6 +16,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/canonical/chisel/internal/archive"
+	"github.com/canonical/chisel/internal/bins"
 	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/manifestutil"
@@ -23,12 +24,14 @@ import (
 	"github.com/canonical/chisel/internal/setup"
 )
 
-const manifestMode fs.FileMode = 0644
+const manifestMode fs.FileMode = 0o644
 
 type RunOptions struct {
-	Selection *setup.Selection
-	Archives  map[string]archive.Archive
-	TargetDir string
+	Selection  *setup.Selection
+	Archives   map[string]archive.Archive
+	BinSources map[string]bins.Source
+	TargetDir  string
+	Arch       string
 }
 
 type pathData struct {
@@ -95,6 +98,16 @@ func Run(options *RunOptions) error {
 		return err
 	}
 
+	// Build a map from package name to architecture. For deb packages, this
+	// comes from the archive options. For bin packages, from RunOptions.Arch.
+	pkgArch := make(map[string]string)
+	for pkg, a := range pkgArchive {
+		pkgArch[pkg] = a.Options().Arch
+	}
+	for pkg := range options.BinSources {
+		pkgArch[pkg] = options.Arch
+	}
+
 	prefers, err := options.Selection.Prefers()
 	if err != nil {
 		return err
@@ -108,7 +121,7 @@ func Run(options *RunOptions) error {
 			extractPackage = make(map[string][]deb.ExtractInfo)
 			extract[slice.Package] = extractPackage
 		}
-		arch := pkgArchive[slice.Package].Options().Arch
+		arch := pkgArch[slice.Package]
 		for targetPath, pathInfo := range slice.Contents {
 			if targetPath == "" {
 				continue
@@ -147,18 +160,38 @@ func Run(options *RunOptions) error {
 
 	// Fetch all packages, using the selection order.
 	packages := make(map[string]io.ReadSeekCloser)
+	binPkgs := make(map[string]bool)
 	var pkgInfos []*archive.PackageInfo
 	for _, slice := range options.Selection.Slices {
 		if packages[slice.Package] != nil {
 			continue
 		}
-		reader, info, err := pkgArchive[slice.Package].Fetch(slice.Package)
-		if err != nil {
-			return err
+		if bins.IsBinPackage(slice.Package) && options.BinSources != nil {
+			src := options.BinSources[slice.Package]
+			if src == nil {
+				return fmt.Errorf("no bin source for package %q", slice.Package)
+			}
+			reader, info, err := src.Fetch(slice.Package)
+			if err != nil {
+				return err
+			}
+			packages[slice.Package] = reader
+			binPkgs[slice.Package] = true
+			pkgInfos = append(pkgInfos, &archive.PackageInfo{
+				Name:    info.Name,
+				Version: info.Version,
+				Arch:    pkgArch[slice.Package],
+				SHA3384: info.SHA3384,
+			})
+		} else {
+			reader, info, err := pkgArchive[slice.Package].Fetch(slice.Package)
+			if err != nil {
+				return err
+			}
+			defer reader.Close()
+			packages[slice.Package] = reader
+			pkgInfos = append(pkgInfos, info)
 		}
-		defer reader.Close()
-		packages[slice.Package] = reader
-		pkgInfos = append(pkgInfos, info)
 	}
 
 	// When creating content, record if a path is known and whether they are
@@ -238,12 +271,17 @@ func Run(options *RunOptions) error {
 		if reader == nil {
 			continue
 		}
-		err := deb.Extract(reader, &deb.ExtractOptions{
+		extractOpts := &deb.ExtractOptions{
 			Package:   slice.Package,
 			Extract:   extract[slice.Package],
 			TargetDir: targetDir,
 			Create:    create,
-		})
+		}
+		if binPkgs[slice.Package] {
+			err = deb.ExtractTar(reader, extractOpts)
+		} else {
+			err = deb.Extract(reader, extractOpts)
+		}
 		reader.Close()
 		packages[slice.Package] = nil
 		if err != nil {
@@ -269,7 +307,7 @@ func Run(options *RunOptions) error {
 	// them to the appropriate slices.
 	relPaths := map[string][]*setup.Slice{}
 	for _, slice := range options.Selection.Slices {
-		arch := pkgArchive[slice.Package].Options().Arch
+		arch := pkgArch[slice.Package]
 		for relPath, pathInfo := range slice.Contents {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
 				continue
@@ -351,7 +389,8 @@ func Run(options *RunOptions) error {
 }
 
 func generateManifests(targetDir string, selection *setup.Selection,
-	report *manifestutil.Report, pkgInfos []*archive.PackageInfo) error {
+	report *manifestutil.Report, pkgInfos []*archive.PackageInfo,
+) error {
 	manifestSlices := manifestutil.FindPaths(selection.Slices)
 	if len(manifestSlices) == 0 {
 		// Nothing to do.
@@ -509,6 +548,10 @@ func selectPkgArchives(archives map[string]archive.Archive, selection *setup.Sel
 	pkgArchive := make(map[string]archive.Archive)
 	for _, s := range selection.Slices {
 		if _, ok := pkgArchive[s.Package]; ok {
+			continue
+		}
+		// Skip bin packages; they are handled by BinSources.
+		if bins.IsBinPackage(s.Package) {
 			continue
 		}
 		pkg := selection.Release.Packages[s.Package]

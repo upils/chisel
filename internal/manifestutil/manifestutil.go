@@ -71,11 +71,15 @@ func Write(options *WriteOptions, writer io.Writer) error {
 
 func manifestAddPackages(dbw *jsonwall.DBWriter, infos []*archive.PackageInfo) error {
 	for _, info := range infos {
+		digest := info.SHA256
+		if digest == "" {
+			digest = info.SHA3384
+		}
 		err := dbw.Add(&manifest.Package{
 			Kind:    "package",
 			Name:    info.Name,
 			Version: info.Version,
-			Digest:  info.SHA256,
+			Digest:  digest,
 			Arch:    info.Arch,
 		})
 		if err != nil {
@@ -257,8 +261,8 @@ func validatePackage(pkg *archive.PackageInfo) (err error) {
 	if pkg.Arch == "" {
 		return fmt.Errorf("package %q missing arch", pkg.Name)
 	}
-	if pkg.SHA256 == "" {
-		return fmt.Errorf("package %q missing sha256", pkg.Name)
+	if pkg.SHA256 == "" && pkg.SHA3384 == "" {
+		return fmt.Errorf("package %q missing digest", pkg.Name)
 	}
 	if pkg.Version == "" {
 		return fmt.Errorf("package %q missing version", pkg.Name)

@@ -83,11 +83,40 @@ func Extract(pkgReader io.ReadSeeker, options *ExtractOptions) (err error) {
 		return err
 	}
 
-	return extractData(pkgReader, validOpts)
+	return extractData(pkgReader, validOpts, DataReader)
 }
 
-func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
-	dataReader, err := DataReader(pkgReader)
+// ExtractTar is like Extract but for tar archives (e.g. bins) that are not
+// wrapped in a .deb ar container.
+func ExtractTar(pkgReader io.ReadSeeker, options *ExtractOptions) (err error) {
+	defer func() {
+		if err != nil {
+			err = fmt.Errorf("cannot extract from package %q: %w", options.Package, err)
+		}
+	}()
+
+	logf("Extracting files from package %q...", options.Package)
+
+	validOpts, err := getValidOptions(options)
+	if err != nil {
+		return err
+	}
+
+	_, err = os.Stat(validOpts.TargetDir)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("target directory does not exist")
+	} else if err != nil {
+		return err
+	}
+
+	return extractData(pkgReader, validOpts, TarReader)
+}
+
+// openTarFunc creates a tar stream reader from a seekable package reader.
+type openTarFunc func(io.ReadSeeker) (io.ReadCloser, error)
+
+func extractData(pkgReader io.ReadSeeker, options *ExtractOptions, openTar openTarFunc) error {
+	dataReader, err := openTar(pkgReader)
 	if err != nil {
 		return err
 	}
@@ -169,7 +198,7 @@ func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
 		}
 
 		var contentCache []byte
-		var contentIsCached = len(targetPaths) > 1 && !sourceIsDir
+		contentIsCached := len(targetPaths) > 1 && !sourceIsDir
 		if contentIsCached {
 			// Read and cache the content so it may be reused.
 			// As an alternative, to avoid having an entire file in
@@ -269,7 +298,7 @@ func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
 		if err != nil {
 			return err
 		}
-		err = extractHardLinks(pkgReader, extractHardLinkOptions)
+		err = extractHardLinks(pkgReader, extractHardLinkOptions, openTar)
 		if err != nil {
 			return err
 		}
@@ -303,8 +332,8 @@ type extractHardLinkOptions struct {
 
 // extractHardLinks iterates through the tarball a second time to extract the
 // hard links that were not extracted in the first pass.
-func extractHardLinks(pkgReader io.ReadSeeker, opts *extractHardLinkOptions) error {
-	dataReader, err := DataReader(pkgReader)
+func extractHardLinks(pkgReader io.ReadSeeker, opts *extractHardLinkOptions, openTar openTarFunc) error {
+	dataReader, err := openTar(pkgReader)
 	if err != nil {
 		return err
 	}
@@ -379,6 +408,16 @@ func extractHardLinks(pkgReader io.ReadSeeker, opts *extractHardLinkOptions) err
 	return nil
 }
 
+// TarReader takes a Reader for a compressed tar archive (tar.xz) and returns
+// a Reader to the decompressed tar stream.
+func TarReader(pkgReader io.ReadSeeker) (io.ReadCloser, error) {
+	xzReader, err := xz.NewReader(pkgReader)
+	if err != nil {
+		return nil, err
+	}
+	return io.NopCloser(xzReader), nil
+}
+
 // DataReader takes a Reader for the ar file belonging to a Debian package and
 // returns a Reader to the inner tarball.
 func DataReader(pkgReader io.ReadSeeker) (io.ReadCloser, error) {
@@ -430,11 +469,22 @@ func parentDirs(path string) []string {
 	return parents
 }
 
-// sanitizeTarPath removes the leading "./" from the source path in the tarball,
-// and verifies that the path is not empty.
+// sanitizeTarPath normalizes a source path from a tarball. It handles both
+// deb-style paths (prefixed with "./") and plain tar paths (prefixed with "/"
+// or without any prefix). Returns the cleaned path starting with "/" and a
+// boolean indicating whether the path is valid.
 func sanitizeTarPath(path string) (string, bool) {
-	if len(path) < 3 || path[0] != '.' || path[1] != '/' {
+	if path == "./" || path == "." || path == "/" || path == "" {
 		return "", false
 	}
-	return path[1:], true
+	if path[0] == '.' && len(path) > 1 && path[1] == '/' {
+		// deb-style: "./usr/bin/ls" -> "/usr/bin/ls"
+		return path[1:], true
+	}
+	if path[0] == '/' {
+		// Absolute path: "/usr/bin/ls" -> "/usr/bin/ls"
+		return path, true
+	}
+	// Relative path without prefix: "usr/bin/ls" -> "/usr/bin/ls"
+	return "/" + path, true
 }

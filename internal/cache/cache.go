@@ -9,7 +9,28 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/crypto/sha3"
 )
+
+// HashAlgorithm identifies the hash algorithm used for cache entries.
+type HashAlgorithm string
+
+const (
+	SHA256  HashAlgorithm = "sha256"
+	SHA3384 HashAlgorithm = "sha3-384"
+)
+
+func newHash(algo HashAlgorithm) (hash.Hash, error) {
+	switch algo {
+	case SHA256:
+		return sha256.New(), nil
+	case SHA3384:
+		return sha3.New384(), nil
+	default:
+		return nil, fmt.Errorf("unsupported hash algorithm: %s", algo)
+	}
+}
 
 func DefaultDir(suffix string) string {
 	cacheDir := os.Getenv("XDG_CACHE_HOME")
@@ -34,6 +55,7 @@ type Cache struct {
 
 type Writer struct {
 	dir    string
+	algo   HashAlgorithm
 	digest string
 	hash   hash.Hash
 	file   *os.File
@@ -89,41 +111,52 @@ func (cw *Writer) Digest() string {
 	return cw.digest
 }
 
-const digestKind = "sha256"
-
 var MissErr = fmt.Errorf("not cached")
 
-func (c *Cache) filePath(digest string) string {
-	return filepath.Join(c.Dir, digestKind, digest)
+func (c *Cache) filePathAlgo(algo HashAlgorithm, digest string) string {
+	return filepath.Join(c.Dir, string(algo), digest)
 }
 
 func (c *Cache) Create(digest string) *Writer {
+	return c.CreateWithAlgo(SHA256, digest)
+}
+
+func (c *Cache) CreateWithAlgo(algo HashAlgorithm, digest string) *Writer {
 	if c.Dir == "" {
 		return &Writer{err: fmt.Errorf("internal error: cache directory is unset")}
 	}
-	err := os.MkdirAll(filepath.Join(c.Dir, digestKind), 0755)
+	h, err := newHash(algo)
+	if err != nil {
+		return &Writer{err: err}
+	}
+	err = os.MkdirAll(filepath.Join(c.Dir, string(algo)), 0o755)
 	if err != nil {
 		return &Writer{err: fmt.Errorf("cannot create cache directory: %v", err)}
 	}
 	var file *os.File
 	if digest == "" {
-		file, err = os.CreateTemp(c.filePath(""), "tmp.*")
+		file, err = os.CreateTemp(c.filePathAlgo(algo, ""), "tmp.*")
 	} else {
-		file, err = os.Create(c.filePath(digest + ".tmp"))
+		file, err = os.Create(c.filePathAlgo(algo, digest+".tmp"))
 	}
 	if err != nil {
 		return &Writer{err: fmt.Errorf("cannot create cache file: %v", err)}
 	}
 	return &Writer{
 		dir:    c.Dir,
+		algo:   algo,
 		digest: digest,
-		hash:   sha256.New(),
+		hash:   h,
 		file:   file,
 	}
 }
 
 func (c *Cache) Write(digest string, data []byte) error {
-	f := c.Create(digest)
+	return c.WriteWithAlgo(SHA256, digest, data)
+}
+
+func (c *Cache) WriteWithAlgo(algo HashAlgorithm, digest string, data []byte) error {
+	f := c.CreateWithAlgo(algo, digest)
 	_, err1 := f.Write(data)
 	err2 := f.Close()
 	if err1 != nil {
@@ -133,10 +166,14 @@ func (c *Cache) Write(digest string, data []byte) error {
 }
 
 func (c *Cache) Open(digest string) (io.ReadSeekCloser, error) {
+	return c.OpenWithAlgo(SHA256, digest)
+}
+
+func (c *Cache) OpenWithAlgo(algo HashAlgorithm, digest string) (io.ReadSeekCloser, error) {
 	if c.Dir == "" || digest == "" {
 		return nil, MissErr
 	}
-	filePath := c.filePath(digest)
+	filePath := c.filePathAlgo(algo, digest)
 	file, err := os.Open(filePath)
 	if os.IsNotExist(err) {
 		return nil, MissErr
@@ -152,7 +189,11 @@ func (c *Cache) Open(digest string) (io.ReadSeekCloser, error) {
 }
 
 func (c *Cache) Read(digest string) ([]byte, error) {
-	file, err := c.Open(digest)
+	return c.ReadWithAlgo(SHA256, digest)
+}
+
+func (c *Cache) ReadWithAlgo(algo HashAlgorithm, digest string) ([]byte, error) {
+	file, err := c.OpenWithAlgo(algo, digest)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +206,22 @@ func (c *Cache) Read(digest string) ([]byte, error) {
 }
 
 func (c *Cache) Expire(timeout time.Duration) error {
-	entries, err := os.ReadDir(filepath.Join(c.Dir, digestKind))
+	algos := []HashAlgorithm{SHA256, SHA3384}
+	for _, algo := range algos {
+		err := c.expireAlgo(algo, timeout)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Cache) expireAlgo(algo HashAlgorithm, timeout time.Duration) error {
+	dir := filepath.Join(c.Dir, string(algo))
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("cannot list cache directory: %v", err)
 	}
@@ -178,7 +234,7 @@ func (c *Cache) Expire(timeout time.Duration) error {
 		if finfo.ModTime().After(expired) {
 			continue
 		}
-		err = os.Remove(filepath.Join(c.Dir, digestKind, finfo.Name()))
+		err = os.Remove(filepath.Join(dir, finfo.Name()))
 		if err != nil {
 			return fmt.Errorf("cannot expire cache entry: %v", err)
 		}

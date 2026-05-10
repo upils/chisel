@@ -517,13 +517,13 @@ var generateManifestTests = []struct {
 	}},
 	error: `internal error: invalid manifest: package "package-1" missing arch`,
 }, {
-	summary: "Invalid package: missing sha256",
+	summary: "Invalid package: missing digest",
 	packageInfo: []*archive.PackageInfo{{
 		Name:    "package-1",
 		Version: "v1",
 		Arch:    "a1",
 	}},
-	error: `internal error: invalid manifest: package "package-1" missing sha256`,
+	error: `internal error: invalid manifest: package "package-1" missing digest`,
 }}
 
 func (s *S) TestGenerateManifests(c *C) {

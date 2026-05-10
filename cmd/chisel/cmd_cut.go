@@ -8,6 +8,7 @@ import (
 	"github.com/jessevdk/go-flags"
 
 	"github.com/canonical/chisel/internal/archive"
+	"github.com/canonical/chisel/internal/bins"
 	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
@@ -121,10 +122,37 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
+	// Create bin sources for any bin-prefixed packages in the selection.
+	var binSources map[string]bins.Source
+	for _, slice := range selection.Slices {
+		if !bins.IsBinPackage(slice.Package) {
+			continue
+		}
+		if binSources == nil {
+			binSources = make(map[string]bins.Source)
+		}
+		if _, ok := binSources[slice.Package]; ok {
+			continue
+		}
+		pkg := release.Packages[slice.Package]
+		src, err := bins.Open(&bins.Options{
+			Arch:     cmd.Arch,
+			Track:    pkg.Track,
+			Risk:     pkg.Risk,
+			CacheDir: cache.DefaultDir("chisel"),
+		})
+		if err != nil {
+			return err
+		}
+		binSources[slice.Package] = src
+	}
+
 	err = slicer.Run(&slicer.RunOptions{
-		Selection: selection,
-		Archives:  archives,
-		TargetDir: cmd.RootDir,
+		Selection:  selection,
+		Archives:   archives,
+		BinSources: binSources,
+		TargetDir:  cmd.RootDir,
+		Arch:       cmd.Arch,
 	})
 	return err
 }
