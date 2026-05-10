@@ -276,7 +276,6 @@ func (s *binSource) Fetch(pkg, track, risk string) (io.ReadSeekCloser, *BinPacka
 	if err != nil {
 		return nil, nil, err
 	}
-	logf("Downloading bin %s...", name)
 	req, err := http.NewRequest("GET", downloadURL, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot create HTTP request: %v", err)
