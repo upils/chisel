@@ -23,7 +23,7 @@ import (
 	"github.com/canonical/chisel/internal/setup"
 )
 
-const manifestMode fs.FileMode = 0o644
+const manifestMode fs.FileMode = 0644
 
 type RunOptions struct {
 	Selection *setup.Selection
@@ -467,9 +467,9 @@ func createFile(targetDir, relPath string, pathInfo setup.PathInfo) (*fsutil.Ent
 	targetMode := pathInfo.Mode
 	if targetMode == 0 {
 		if pathInfo.Kind == setup.DirPath {
-			targetMode = 0o755
+			targetMode = 0755
 		} else {
-			targetMode = 0o644
+			targetMode = 0644
 		}
 	}
 

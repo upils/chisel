@@ -99,7 +99,7 @@ const (
 	GeneratePath PathKind = "generate"
 
 	// TODO Maybe in the future, for binary support.
-	// Base64Path PathKind = "base64"
+	//Base64Path PathKind = "base64"
 )
 
 type PathUntil string

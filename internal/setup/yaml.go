@@ -127,10 +127,8 @@ func (es yamlEssentialListMap) MarshalYAML() (any, error) {
 	return es.Values, nil
 }
 
-var (
-	_ yaml.Marshaler   = yamlEssentialListMap{}
-	_ yaml.Unmarshaler = (*yamlEssentialListMap)(nil)
-)
+var _ yaml.Marshaler = yamlEssentialListMap{}
+var _ yaml.Unmarshaler = (*yamlEssentialListMap)(nil)
 
 type yamlPath struct {
 	Dir      bool         `yaml:"make,omitempty"`
@@ -585,7 +583,7 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 			if !path.IsAbs(contPath) || path.Clean(contPath) != comparePath {
 				return nil, fmt.Errorf("slice %s_%s has invalid content path: %s", pkgName, sliceName, contPath)
 			}
-			kinds := make([]PathKind, 0, 3)
+			var kinds = make([]PathKind, 0, 3)
 			var info string
 			var mode uint
 			var mutable bool
