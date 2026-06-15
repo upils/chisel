@@ -95,17 +95,17 @@ func (cw *Writer) Digest() string {
 type hashAlgo string
 
 const (
-	SHA256   hashAlgo = "sha256"
-	SHA3_384 hashAlgo = "sha3-384"
+	SHA256 hashAlgo = "sha256"
+	SHA384 hashAlgo = "sha384"
 )
 
-var hashAlgos = []hashAlgo{SHA256, SHA3_384}
+var hashAlgos = []hashAlgo{SHA256, SHA384}
 
 func newHash(algo hashAlgo) (hash.Hash, error) {
 	switch algo {
 	case SHA256:
 		return sha256.New(), nil
-	case SHA3_384:
+	case SHA384:
 		return sha3.New384(), nil
 	default:
 		return nil, fmt.Errorf("unsupported hash algorithm: %q", algo)
