@@ -170,13 +170,13 @@ func (s *S) TestCacheSHA3384(c *C) {
 
 	// SHA3-384 entry must not be visible under SHA-256.
 	_, err = cc.Open(cache.SHA256, sha3Digest)
-	c.Assert(err, Equals, cache.MissErr)
+	c.Assert(err, Equals, cache.ErrMiss)
 
 	// SHA-256 entry must not be visible under SHA3-384.
 	err = cc.Write(cache.SHA256, data1Digest, []byte("data1"))
 	c.Assert(err, IsNil)
 	_, err = cc.Open(cache.SHA3_384, data1Digest)
-	c.Assert(err, Equals, cache.MissErr)
+	c.Assert(err, Equals, cache.ErrMiss)
 }
 
 func (s *S) TestCacheExpireBothAlgorithms(c *C) {
