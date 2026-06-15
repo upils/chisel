@@ -147,10 +147,10 @@ func ParseSliceKey(sliceKey string) (SliceKey, error) {
 }
 
 func (s *Slice) String() string {
-	return SliceKey{Package: s.RealPkgName(), Slice: s.Name}.String()
+	return SliceKey{Package: s.PkgRealName(), Slice: s.Name}.String()
 }
 
-func (s *Slice) RealPkgName() string {
+func (s *Slice) PkgRealName() string {
 	return s.DefaultPrefix + s.Package
 }
 
@@ -179,7 +179,7 @@ func (s *Selection) Prefers() (map[string]*Package, error) {
 			if !hasPrefers {
 				continue
 			}
-			sRealName := slice.RealPkgName()
+			sRealName := slice.PkgRealName()
 			old, ok := pathPreferredPkg[path]
 			if !ok {
 				pathPreferredPkg[path] = s.Release.Packages[sRealName]
@@ -245,11 +245,11 @@ func (r *Release) validate() error {
 	for _, pkg := range r.Packages {
 		for _, new := range pkg.Slices {
 			keys = append(keys, SliceKey{Package: pkg.RealName, Slice: new.Name})
-			newRealName := new.RealPkgName()
+			newRealName := new.PkgRealName()
 			for newPath, newInfo := range new.Contents {
 				if oldSlices, ok := paths[newPath]; ok {
 					for _, old := range oldSlices {
-						oldRealName := old.RealPkgName()
+						oldRealName := old.PkgRealName()
 						if newRealName != oldRealName {
 							_, err := preferredPathPackage(newPath, newRealName, oldRealName, prefers)
 							if err == nil {
@@ -284,7 +284,7 @@ func (r *Release) validate() error {
 
 			found := false
 			for _, slice := range paths[skey.path] {
-				if slice.RealPkgName() == skey.pkg {
+				if slice.PkgRealName() == skey.pkg {
 					found = true
 					break
 				}
@@ -309,8 +309,8 @@ func (r *Release) validate() error {
 				}
 				for _, new := range newSlices {
 					newInfo := new.Contents[newPath]
-					newRealName := new.RealPkgName()
-					oldRealName := old.RealPkgName()
+					newRealName := new.PkgRealName()
+					oldRealName := old.PkgRealName()
 					if oldInfo.Kind == GlobPath && (newInfo.Kind == GlobPath || newInfo.Kind == CopyPath) {
 						if newRealName == oldRealName {
 							continue

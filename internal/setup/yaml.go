@@ -868,7 +868,7 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 		if err != nil {
 			return fmt.Errorf("package %q has invalid essential slice reference: %q", yamlPkg.Name, refName)
 		}
-		if sliceKey.Package == slice.RealPkgName() && sliceKey.Slice == slice.Name {
+		if sliceKey.Package == slice.PkgRealName() && sliceKey.Slice == slice.Name {
 			// Do not add the slice to its own essentials list.
 			return nil
 		}
@@ -890,7 +890,7 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 		if err != nil {
 			return fmt.Errorf("package %q has invalid essential slice reference: %q", yamlPkg.Name, refName)
 		}
-		if sliceKey.Package == slice.RealPkgName() && sliceKey.Slice == slice.Name {
+		if sliceKey.Package == slice.PkgRealName() && sliceKey.Slice == slice.Name {
 			return fmt.Errorf("cannot add slice to itself as essential %s in %s", refName, pkgPath)
 		}
 		if _, ok := slice.Essential[sliceKey]; ok {
