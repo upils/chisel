@@ -444,7 +444,7 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 
 	// Parse stores.
 	if len(yamlVar.Stores) > 0 && (release.Format == "v1" || release.Format == "v2") {
-		return nil, fmt.Errorf("%s: stores is not supported in format %q", fileName, release.Format)
+		return nil, fmt.Errorf("%s: cannot use stores in format %q", fileName, release.Format)
 	}
 	if len(yamlVar.Stores) > 0 {
 		release.Stores = make(map[string]*Store, len(yamlVar.Stores))
@@ -496,16 +496,16 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 	}
 	if yamlPkg.Store != "" {
 		if yamlPkg.DefaultTrack == "" {
-			return nil, fmt.Errorf("cannot parse package %q: 'default-track' is required when 'store' is set", pkgName)
+			return nil, fmt.Errorf("cannot parse package %q: 'store' requires 'default-track'", pkgName)
 		}
 		if strings.Contains(yamlPkg.DefaultTrack, "/") {
-			return nil, fmt.Errorf("cannot parse package %q: 'default-track' must be a track name without /", pkgName)
+			return nil, fmt.Errorf("cannot parse package %q: 'default-track' must not contain /", pkgName)
 		}
 		pkg.Store = yamlPkg.Store
 		pkg.DefaultTrack = yamlPkg.DefaultTrack
 	} else {
 		if yamlPkg.DefaultTrack != "" {
-			return nil, fmt.Errorf("cannot parse package %q: 'store' is required when 'default-track' is set", pkgName)
+			return nil, fmt.Errorf("cannot parse package %q: 'default-track' requires 'store'", pkgName)
 		}
 	}
 

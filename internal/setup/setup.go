@@ -16,7 +16,7 @@ import (
 	"github.com/canonical/chisel/internal/strdist"
 )
 
-// Store is the location from which bin packages are obtained via a store API.
+// Store is the location from which packages are obtained via a store API.
 type Store struct {
 	Name          string
 	Kind          string

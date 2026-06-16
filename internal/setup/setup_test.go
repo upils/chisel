@@ -4057,7 +4057,7 @@ var setupTests = []setupTest{{
 			store: bin
 		`,
 	},
-	relerror: `cannot parse package "mypkg": 'default-track' is required when 'store' is set`,
+	relerror: `cannot parse package "mypkg": 'store' requires 'default-track'`,
 }, {
 	summary: "default-track without store (v3)",
 	input: map[string]string{
@@ -4087,7 +4087,7 @@ var setupTests = []setupTest{{
 			default-track: "3.0"
 		`,
 	},
-	relerror: `cannot parse package "mypkg": 'store' is required when 'default-track' is set`,
+	relerror: `cannot parse package "mypkg": 'default-track' requires 'store'`,
 }, {
 	summary: "default-track must not contain / (v3)",
 	input: map[string]string{
@@ -4118,7 +4118,7 @@ var setupTests = []setupTest{{
 			default-track: "3.0/stable"
 		`,
 	},
-	relerror: `cannot parse package "mypkg": 'default-track' must be a track name without /`,
+	relerror: `cannot parse package "mypkg": 'default-track' must not contain /`,
 }, {
 	summary: "Package store references undefined store (v3)",
 	input: map[string]string{
@@ -4487,7 +4487,7 @@ func (s *S) TestStoresNotSupportedInOldFormats(c *C) {
 		err = os.MkdirAll(filepath.Join(dir, "slices"), 0o755)
 		c.Assert(err, IsNil)
 		_, err = setup.ReadRelease(dir)
-		c.Assert(err, ErrorMatches, `chisel.yaml: stores is not supported in format "`+format+`"`)
+		c.Assert(err, ErrorMatches, `chisel.yaml: cannot use stores in format "`+format+`"`)
 	}
 }
 
