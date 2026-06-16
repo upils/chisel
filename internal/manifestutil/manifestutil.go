@@ -37,6 +37,7 @@ func FindPaths(slices []*setup.Slice) map[string][]*setup.Slice {
 type WriteOptions struct {
 	PackageInfo []*archive.PackageInfo
 	Selection   []*setup.Slice
+	Packages    map[string]*setup.Package
 	Report      *Report
 }
 
@@ -50,7 +51,7 @@ func Write(options *WriteOptions, writer io.Writer) error {
 		return err
 	}
 
-	err = manifestAddPackages(dbw, options.PackageInfo)
+	err = manifestAddPackages(dbw, options.PackageInfo, options.Packages)
 	if err != nil {
 		return err
 	}
@@ -69,11 +70,21 @@ func Write(options *WriteOptions, writer io.Writer) error {
 	return err
 }
 
-func manifestAddPackages(dbw *jsonwall.DBWriter, infos []*archive.PackageInfo) error {
+func manifestAddPackages(dbw *jsonwall.DBWriter, infos []*archive.PackageInfo, packages map[string]*setup.Package) error {
 	for _, info := range infos {
+		pkgName := info.Name
+		if packages != nil {
+			// Find the unique package name for this bare archive name.
+			for uniqueName, pkg := range packages {
+				if pkg.RealName == info.Name {
+					pkgName = uniqueName
+					break
+				}
+			}
+		}
 		err := dbw.Add(&manifest.Package{
 			Kind:    "package",
-			Name:    info.Name,
+			Name:    pkgName,
 			Version: info.Version,
 			Digest:  info.SHA256,
 			Arch:    info.Arch,
@@ -159,8 +170,18 @@ func fastValidate(options *WriteOptions) (err error) {
 	}
 	sliceExist := map[string]bool{}
 	for _, slice := range options.Selection {
-		if _, ok := pkgExist[slice.Package]; !ok {
-			return fmt.Errorf("slice %s refers to missing package %q", slice.String(), slice.Package)
+		if options.Packages != nil {
+			pkg := options.Packages[slice.Package]
+			if pkg == nil {
+				return fmt.Errorf("slice %s refers to missing package %q", slice.String(), slice.Package)
+			}
+			if _, ok := pkgExist[pkg.RealName]; !ok {
+				return fmt.Errorf("slice %s refers to missing package %q", slice.String(), slice.Package)
+			}
+		} else {
+			if _, ok := pkgExist[slice.Package]; !ok {
+				return fmt.Errorf("slice %s refers to missing package %q", slice.String(), slice.Package)
+			}
 		}
 		sliceExist[slice.String()] = true
 	}

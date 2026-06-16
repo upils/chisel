@@ -3983,8 +3983,8 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"bin-mypkg": {
-				RealName:     "bin-mypkg",
-				Name:         "mypkg",
+				RealName:     "mypkg",
+				Name:         "bin-mypkg",
 				Path:         "slices/bin/mypkg.yaml",
 				Store:        "bin",
 				DefaultTrack: "3.0",
@@ -4271,17 +4271,15 @@ var setupTests = []setupTest{{
 				Path:     "slices/curl.yaml",
 				Slices: map[string]*setup.Slice{
 					"libs": {
-						Package:       "curl",
-						DefaultPrefix: "",
-						Name:          "libs",
+						Package: "curl",
+						Name:    "libs",
 						Contents: map[string]setup.PathInfo{
 							"/usr/lib/libcurl.so": {Kind: setup.CopyPath},
 						},
 					},
 					"bins": {
-						Package:       "curl",
-						DefaultPrefix: "",
-						Name:          "bins",
+						Package: "curl",
+						Name:    "bins",
 						Contents: map[string]setup.PathInfo{
 							"/usr/bin/curl": {Kind: setup.CopyPath},
 						},
@@ -4289,16 +4287,15 @@ var setupTests = []setupTest{{
 				},
 			},
 			"bin-curl": {
-				RealName:     "bin-curl",
-				Name:         "curl",
+				RealName:     "curl",
+				Name:         "bin-curl",
 				Path:         "slices/bin/curl.yaml",
 				Store:        "bin",
 				DefaultTrack: "3.0",
 				Slices: map[string]*setup.Slice{
 					"bins": {
-						Package:       "curl",
-						DefaultPrefix: "bin-",
-						Name:          "bins",
+						Package: "bin-curl",
+						Name:    "bins",
 						Contents: map[string]setup.PathInfo{
 							"/usr/bin/curl-bin": {Kind: setup.CopyPath},
 						},

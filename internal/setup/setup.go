@@ -59,9 +59,12 @@ type Archive struct {
 }
 
 // Package holds a collection of slices that represent parts of themselves.
+// Name is the unique package identifier (e.g. "bin-curl" for store packages,
+// "curl" for archive packages). RealName is the bare name visible in the
+// Debian archive (e.g. "curl").
 type Package struct {
-	RealName     string
 	Name         string
+	RealName     string
 	Path         string
 	Archive      string
 	Store        string
@@ -70,14 +73,14 @@ type Package struct {
 }
 
 // Slice holds the details about a package slice.
+// Package is the unique package identifier matching Package.Name.
 type Slice struct {
-	Package       string
-	DefaultPrefix string
-	Name          string
-	Hint          string
-	Essential     map[SliceKey]EssentialInfo
-	Contents      map[string]PathInfo
-	Scripts       SliceScripts
+	Package   string
+	Name      string
+	Hint      string
+	Essential map[SliceKey]EssentialInfo
+	Contents  map[string]PathInfo
+	Scripts   SliceScripts
 }
 
 type EssentialInfo struct {
@@ -147,11 +150,7 @@ func ParseSliceKey(sliceKey string) (SliceKey, error) {
 }
 
 func (s *Slice) String() string {
-	return SliceKey{Package: s.PkgRealName(), Slice: s.Name}.String()
-}
-
-func (s *Slice) PkgRealName() string {
-	return s.DefaultPrefix + s.Package
+	return SliceKey{Package: s.Package, Slice: s.Name}.String()
 }
 
 // Selection holds the required configuration to create a Build for a selection
@@ -179,13 +178,13 @@ func (s *Selection) Prefers() (map[string]*Package, error) {
 			if !hasPrefers {
 				continue
 			}
-			sRealName := slice.PkgRealName()
+			sRealName := slice.Package
 			old, ok := pathPreferredPkg[path]
 			if !ok {
 				pathPreferredPkg[path] = s.Release.Packages[sRealName]
 				continue
 			}
-			oldRealName := old.RealName
+			oldRealName := old.Name
 			if oldRealName == sRealName {
 				// Skip if the package was already recorded.
 				continue
@@ -244,12 +243,12 @@ func (r *Release) validate() error {
 	paths := make(map[string][]*Slice)
 	for _, pkg := range r.Packages {
 		for _, new := range pkg.Slices {
-			keys = append(keys, SliceKey{Package: pkg.RealName, Slice: new.Name})
-			newRealName := new.PkgRealName()
+			keys = append(keys, SliceKey{Package: pkg.Name, Slice: new.Name})
+			newRealName := new.Package
 			for newPath, newInfo := range new.Contents {
 				if oldSlices, ok := paths[newPath]; ok {
 					for _, old := range oldSlices {
-						oldRealName := old.PkgRealName()
+						oldRealName := old.Package
 						if newRealName != oldRealName {
 							_, err := preferredPathPackage(newPath, newRealName, oldRealName, prefers)
 							if err == nil {
@@ -284,7 +283,7 @@ func (r *Release) validate() error {
 
 			found := false
 			for _, slice := range paths[skey.path] {
-				if slice.PkgRealName() == skey.pkg {
+				if slice.Package == skey.pkg {
 					found = true
 					break
 				}
@@ -309,8 +308,8 @@ func (r *Release) validate() error {
 				}
 				for _, new := range newSlices {
 					newInfo := new.Contents[newPath]
-					newRealName := new.PkgRealName()
-					oldRealName := old.PkgRealName()
+					newRealName := new.Package
+					oldRealName := old.Package
 					if oldInfo.Kind == GlobPath && (newInfo.Kind == GlobPath || newInfo.Kind == CopyPath) {
 						if newRealName == oldRealName {
 							continue
@@ -488,10 +487,10 @@ func readSlices(release *Release, baseDir, dirName string) error {
 			return err
 		}
 
-		if existing, ok := release.Packages[pkg.RealName]; ok {
-			return fmt.Errorf("package %q slices defined more than once: %s and %s", pkg.RealName, existing.Path, stripBase(baseDir, pkgPath))
+		if existing, ok := release.Packages[pkg.Name]; ok {
+			return fmt.Errorf("package %q slices defined more than once: %s and %s", pkg.Name, existing.Path, stripBase(baseDir, pkgPath))
 		}
-		release.Packages[pkg.RealName] = pkg
+		release.Packages[pkg.Name] = pkg
 	}
 	return nil
 }
