@@ -374,8 +374,8 @@ func (index *ubuntuIndex) distPath(suffix string) string {
 }
 
 func (index *ubuntuIndex) fetch(path, digest string, flags fetchFlags) (io.ReadSeekCloser, error) {
-	const algo = cache.SHA256
-	reader, err := index.archive.cache.Open(algo, digest)
+	const digestKind = cache.SHA256
+	reader, err := index.archive.cache.Open(digestKind, digest)
 	if err == nil {
 		return reader, nil
 	} else if err != cache.ErrMiss {
@@ -426,7 +426,7 @@ func (index *ubuntuIndex) fetch(path, digest string, flags fetchFlags) (io.ReadS
 		body = reader
 	}
 
-	writer := index.archive.cache.Create(algo, digest)
+	writer := index.archive.cache.Create(digestKind, digest)
 	defer writer.Close()
 
 	_, err = io.Copy(writer, body)
@@ -437,7 +437,7 @@ func (index *ubuntuIndex) fetch(path, digest string, flags fetchFlags) (io.ReadS
 		return nil, fmt.Errorf("cannot fetch from archive: %v", err)
 	}
 
-	return index.archive.cache.Open(algo, writer.Digest())
+	return index.archive.cache.Open(digestKind, writer.Digest())
 }
 
 func sectionPackageInfo(section control.Section) *PackageInfo {

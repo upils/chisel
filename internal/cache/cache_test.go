@@ -179,10 +179,10 @@ func (s *S) TestCacheSHA384(c *C) {
 	c.Assert(err, Equals, cache.ErrMiss)
 }
 
-func (s *S) TestCacheExpireBothAlgorithms(c *C) {
+func (s *S) TestCacheExpireBothDigestKinds(c *C) {
 	cc := cache.Cache{Dir: c.MkDir()}
 
-	// Write entries under both algorithms.
+	// Write entries under both digest kinds.
 	err := cc.Write(cache.SHA256, data1Digest, []byte("data1"))
 	c.Assert(err, IsNil)
 	err = cc.Write(cache.SHA256, data2Digest, []byte("data2"))
@@ -207,7 +207,7 @@ func (s *S) TestCacheExpireBothAlgorithms(c *C) {
 	sha384Expired := filepath.Join(cc.Dir, "sha384", sha384Digest1)
 	sha384Fresh := filepath.Join(cc.Dir, "sha384", sha384Digest2)
 
-	// Mark one entry per algorithm as expired.
+	// Mark one entry per digest kind as expired.
 	now := time.Now()
 	expiredTime := now.Add(-2 * time.Hour)
 	err = os.Chtimes(sha256Expired, now, expiredTime)
@@ -218,20 +218,20 @@ func (s *S) TestCacheExpireBothAlgorithms(c *C) {
 	err = cc.Expire(time.Hour)
 	c.Assert(err, IsNil)
 
-	// Expired entries must be removed from both algorithm directories.
+	// Expired entries must be removed from both digest kind directories.
 	_, err = os.Stat(sha256Expired)
 	c.Assert(os.IsNotExist(err), Equals, true)
 	_, err = os.Stat(sha384Expired)
 	c.Assert(os.IsNotExist(err), Equals, true)
 
-	// Fresh entries must remain in both algorithm directories.
+	// Fresh entries must remain in both digest kind directories.
 	_, err = os.Stat(sha256Fresh)
 	c.Assert(err, IsNil)
 	_, err = os.Stat(sha384Fresh)
 	c.Assert(err, IsNil)
 }
 
-func (s *S) TestCacheExpireMissingAlgoDir(c *C) {
+func (s *S) TestCacheExpireMissingDigestKindDir(c *C) {
 	cc := cache.Cache{Dir: c.MkDir()}
 
 	// Only write under sha256; the sha384 directory won't exist.
@@ -247,10 +247,10 @@ func (s *S) TestCacheExpireMissingAlgoDir(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *S) TestCacheExpireNoAlgoDirs(c *C) {
+func (s *S) TestCacheExpireNoDigestKindDirs(c *C) {
 	cc := cache.Cache{Dir: c.MkDir()}
 
-	// No algorithm directories exist at all.
+	// No digest kind directories exist at all.
 	err := cc.Expire(time.Hour)
 	c.Assert(err, IsNil)
 }
