@@ -22,7 +22,9 @@ import (
 	"github.com/canonical/chisel/public/manifest"
 )
 
-var testKey = testutil.PGPKeys["key1"]
+var (
+	testKey = testutil.PGPKeys["key1"]
+)
 
 type slicerTest struct {
 	summary       string
@@ -44,7 +46,7 @@ var packageEntries = map[string][]testutil.TarEntry{
 		{Header: tar.Header{Name: "./usr/"}},
 		{Header: tar.Header{Name: "./usr/lib/"}},
 		{Header: tar.Header{Name: "./usr/lib/x86_64-linux-gnu/"}},
-		{Header: tar.Header{Name: "./usr/lib/x86_64-linux-gnu/libssl.so.3", Mode: 0o0755}},
+		{Header: tar.Header{Name: "./usr/lib/x86_64-linux-gnu/libssl.so.3", Mode: 00755}},
 		{Header: tar.Header{Name: "./usr/share/"}},
 		{Header: tar.Header{Name: "./usr/share/doc/"}},
 		{Header: tar.Header{Name: "./usr/share/doc/copyright-symlink-libssl3/"}},
@@ -57,7 +59,7 @@ var packageEntries = map[string][]testutil.TarEntry{
 		{Header: tar.Header{Name: "./etc/ssl/openssl.cnf"}},
 		{Header: tar.Header{Name: "./usr/"}},
 		{Header: tar.Header{Name: "./usr/bin/"}},
-		{Header: tar.Header{Name: "./usr/bin/openssl", Mode: 0o0755}},
+		{Header: tar.Header{Name: "./usr/bin/openssl", Mode: 00755}},
 		{Header: tar.Header{Name: "./usr/share/"}},
 		{Header: tar.Header{Name: "./usr/share/doc/"}},
 		{Header: tar.Header{Name: "./usr/share/doc/copyright-symlink-openssl/"}},
@@ -67,16 +69,16 @@ var packageEntries = map[string][]testutil.TarEntry{
 
 var testPackageCopyrightEntries = []testutil.TarEntry{
 	// Hardcoded copyright paths.
-	testutil.Dir(0o755, "./usr/"),
-	testutil.Dir(0o755, "./usr/share/"),
-	testutil.Dir(0o755, "./usr/share/doc/"),
-	testutil.Dir(0o755, "./usr/share/doc/test-package/"),
-	testutil.Reg(0o644, "./usr/share/doc/test-package/copyright", "copyright"),
+	testutil.Dir(0755, "./usr/"),
+	testutil.Dir(0755, "./usr/share/"),
+	testutil.Dir(0755, "./usr/share/doc/"),
+	testutil.Dir(0755, "./usr/share/doc/test-package/"),
+	testutil.Reg(0644, "./usr/share/doc/test-package/copyright", "copyright"),
 }
 
 var slicerTests = []slicerTest{{
 	summary: "Basic slicing",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -109,7 +111,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Glob extraction",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -131,7 +133,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Create new file under extracted directory and preserve parent directory permissions",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -151,7 +153,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Create new nested file under extracted directory and preserve parent directory permissions",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -172,7 +174,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Create new directory under extracted directory and preserve parent directory permissions",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -192,7 +194,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Create new file using glob and preserve parent directory permissions",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -216,7 +218,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Conditional architecture",
 	arch:    "amd64",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -247,7 +249,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Copyright is not installed implicitly",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		// Add the copyright entries to the package.
@@ -272,9 +274,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Install two packages",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
-		{Package: "other-package", Slice: "myslice"},
-	},
+		{"test-package", "myslice"},
+		{"other-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.PackageData["test-package"],
@@ -316,26 +317,25 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Install two packages, explicit path has preference over implicit parent",
 	slices: []setup.SliceKey{
-		{Package: "a-implicit-parent", Slice: "myslice"},
-		{Package: "b-explicit-dir", Slice: "myslice"},
-		{Package: "c-implicit-parent", Slice: "myslice"},
-	},
+		{"a-implicit-parent", "myslice"},
+		{"b-explicit-dir", "myslice"},
+		{"c-implicit-parent", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "a-implicit-parent",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./dir/"),
-			testutil.Reg(0o644, "./dir/file-1", "random"),
+			testutil.Dir(0755, "./dir/"),
+			testutil.Reg(0644, "./dir/file-1", "random"),
 		}),
 	}, {
 		Name: "b-explicit-dir",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o1777, "./dir/"),
+			testutil.Dir(01777, "./dir/"),
 		}),
 	}, {
 		Name: "c-implicit-parent",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o766, "./dir/"),
-			testutil.Reg(0o644, "./dir/file-2", "random"),
+			testutil.Dir(0766, "./dir/"),
+			testutil.Reg(0644, "./dir/file-2", "random"),
 		}),
 	}},
 	release: map[string]string{
@@ -376,9 +376,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Valid same file in two slices in different packages",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
-		{Package: "other-package", Slice: "myslice"},
-	},
+		{"test-package", "myslice"},
+		{"other-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.PackageData["test-package"],
@@ -410,7 +409,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Script: write a file",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -431,7 +430,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Script: read a file",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -457,7 +456,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Script: use 'until' to remove file after mutate",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -481,7 +480,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Script: use 'until' to remove wildcard after mutate",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -499,7 +498,7 @@ var slicerTests = []slicerTest{{
 	manifestPaths: map[string]string{},
 }, {
 	summary: "Script: 'until' does not remove non-empty directories",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -520,7 +519,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Script: writing same contents to existing file does not set the final hash in report",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -541,7 +540,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Script: cannot write non-mutable files",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -556,7 +555,7 @@ var slicerTests = []slicerTest{{
 	error: `slice test-package_myslice: cannot write file which is not mutable: /dir/text-file`,
 }, {
 	summary: "Script: cannot write to unlisted file",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -570,7 +569,7 @@ var slicerTests = []slicerTest{{
 	error: `slice test-package_myslice: cannot write file which is not mutable: /dir/text-file`,
 }, {
 	summary: "Script: cannot write to directory",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -585,7 +584,7 @@ var slicerTests = []slicerTest{{
 	error: `slice test-package_myslice: cannot write file which is not mutable: /dir/`,
 }, {
 	summary: "Script: cannot read unlisted content",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice2"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice2"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -601,7 +600,7 @@ var slicerTests = []slicerTest{{
 	error: `slice test-package_myslice2: cannot read file which is not selected: /dir/text-file`,
 }, {
 	summary: "Script: can read globbed content",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice1"}, {Package: "test-package", Slice: "myslice2"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice1"}, {"test-package", "myslice2"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -616,7 +615,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Relative content root directory must not error",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -637,7 +636,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Can list parent directories of normal paths",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -656,7 +655,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Cannot list unselected directory",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -671,7 +670,7 @@ var slicerTests = []slicerTest{{
 	error: `slice test-package_myslice: cannot list directory which is not selected: /a/d/`,
 }, {
 	summary: "Cannot list file path as a directory",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -686,7 +685,7 @@ var slicerTests = []slicerTest{{
 	error: `slice test-package_myslice: content is not a directory: /a/b/c`,
 }, {
 	summary: "Can list parent directories of globs",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -700,7 +699,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Cannot list directories not matched by glob",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -715,7 +714,7 @@ var slicerTests = []slicerTest{{
 	error: `slice test-package_myslice: cannot list directory which is not selected: /other-dir/`,
 }, {
 	summary: "Duplicate copyright symlink is ignored",
-	slices:  []setup.SliceKey{{Package: "copyright-symlink-openssl", Slice: "bins"}},
+	slices:  []setup.SliceKey{{"copyright-symlink-openssl", "bins"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "copyright-symlink-openssl",
 		Data: testutil.MustMakeDeb(packageEntries["copyright-symlink-openssl"]),
@@ -747,7 +746,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Can list unclean directory paths",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -766,7 +765,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Cannot read directories",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -781,14 +780,14 @@ var slicerTests = []slicerTest{{
 	error: `slice test-package_myslice: content is not a file: /x/y`,
 }, {
 	summary: "Multiple archives with priority",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}, {Package: "other-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"other-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name:    "test-package",
 		Hash:    "h1",
 		Version: "v1",
 		Arch:    "a1",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Reg(0o644, "./file", "from foo"),
+			testutil.Reg(0644, "./file", "from foo"),
 		}),
 		Archives: []string{"foo"},
 	}, {
@@ -797,7 +796,7 @@ var slicerTests = []slicerTest{{
 		Version: "v2",
 		Arch:    "a2",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Reg(0o644, "./file", "from bar"),
+			testutil.Reg(0644, "./file", "from bar"),
 		}),
 		Archives: []string{"bar"},
 	}, {
@@ -806,7 +805,7 @@ var slicerTests = []slicerTest{{
 		Version: "v3",
 		Arch:    "a3",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Reg(0o644, "./other-file", "from bar"),
+			testutil.Reg(0644, "./other-file", "from bar"),
 		}),
 		Archives: []string{"bar"},
 	}},
@@ -865,14 +864,14 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Pinned archive bypasses higher priority",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name:    "test-package",
 		Hash:    "h1",
 		Version: "v1",
 		Arch:    "a1",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Reg(0o644, "./file", "from foo"),
+			testutil.Reg(0644, "./file", "from foo"),
 		}),
 		Archives: []string{"foo"},
 	}, {
@@ -881,7 +880,7 @@ var slicerTests = []slicerTest{{
 		Version: "v2",
 		Arch:    "a2",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Reg(0o644, "./file", "from bar"),
+			testutil.Reg(0644, "./file", "from bar"),
 		}),
 		Archives: []string{"bar"},
 	}},
@@ -933,11 +932,11 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Pinned archive does not have the package",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Reg(0o644, "./file", "from foo"),
+			testutil.Reg(0644, "./file", "from foo"),
 		}),
 		Archives: []string{"foo"},
 	}},
@@ -979,7 +978,7 @@ var slicerTests = []slicerTest{{
 	error: `cannot find package "test-package" in archive\(s\)`,
 }, {
 	summary: "No archives have the package",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs:    []*testutil.TestPackage{},
 	release: map[string]string{
 		"chisel.yaml": `
@@ -1016,11 +1015,11 @@ var slicerTests = []slicerTest{{
 	error: `cannot find package "test-package" in archive\(s\)`,
 }, {
 	summary: "Negative priority archives are ignored when not explicitly pinned in package",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Reg(0o644, "./file", "from foo"),
+			testutil.Reg(0644, "./file", "from foo"),
 		}),
 		Archives: []string{"foo"},
 	}},
@@ -1053,14 +1052,14 @@ var slicerTests = []slicerTest{{
 	error: `cannot find package "test-package" in archive\(s\)`,
 }, {
 	summary: "Negative priority archive explicitly pinned in package",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name:    "test-package",
 		Hash:    "h1",
 		Version: "v1",
 		Arch:    "a1",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Reg(0o644, "./file", "from foo"),
+			testutil.Reg(0644, "./file", "from foo"),
 		}),
 		Archives: []string{"foo"},
 	}},
@@ -1103,8 +1102,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Multiple slices of same package",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice1"},
-		{Package: "test-package", Slice: "myslice2"},
+		{"test-package", "myslice1"},
+		{"test-package", "myslice2"},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1141,8 +1140,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Same glob in several entries with until:mutate and reading from script",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice1"},
-		{Package: "test-package", Slice: "myslice2"},
+		{"test-package", "myslice1"},
+		{"test-package", "myslice2"},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1187,8 +1186,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Overlapping globs, until:mutate and reading from script",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice2"},
-		{Package: "test-package", Slice: "myslice1"},
+		{"test-package", "myslice2"},
+		{"test-package", "myslice1"},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1233,8 +1232,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Overlapping glob and single entry, until:mutate on entry and reading from script",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice1"},
-		{Package: "test-package", Slice: "myslice2"},
+		{"test-package", "myslice1"},
+		{"test-package", "myslice2"},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1279,8 +1278,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Overlapping glob and single entry, until:mutate on glob and reading from script",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice1"},
-		{Package: "test-package", Slice: "myslice2"},
+		{"test-package", "myslice1"},
+		{"test-package", "myslice2"},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1308,8 +1307,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Overlapping glob and single entry, until:mutate on both and reading from script",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice1"},
-		{Package: "test-package", Slice: "myslice2"},
+		{"test-package", "myslice1"},
+		{"test-package", "myslice2"},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1332,8 +1331,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Content not created in packages with until:mutate on one and reading from script",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice1"},
-		{Package: "test-package", Slice: "myslice2"},
+		{"test-package", "myslice1"},
+		{"test-package", "myslice2"},
 	},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1356,8 +1355,8 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Install two packages, both are recorded",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
-		{Package: "other-package", Slice: "myslice"},
+		{"test-package", "myslice"},
+		{"other-package", "myslice"},
 	},
 	pkgs: []*testutil.TestPackage{{
 		Name:    "test-package",
@@ -1393,7 +1392,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Two packages, only one is selected and recorded",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
+		{"test-package", "myslice"},
 	},
 	pkgs: []*testutil.TestPackage{{
 		Name:    "test-package",
@@ -1427,7 +1426,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Relative paths are properly trimmed during extraction",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
@@ -1437,12 +1436,12 @@ var slicerTests = []slicerTest{{
 			// relative path. Since TrimLeft takes in a cutset instead of a
 			// prefix, the desired relative path was not produced.
 			// See https://github.com/canonical/chisel/pull/145.
-			testutil.Dir(0o755, "./foo-bar/"),
+			testutil.Dir(0755, "./foo-bar/"),
 		}),
 	}},
 	hackopt: func(c *C, opts *slicer.RunOptions) {
 		opts.TargetDir = filepath.Join(filepath.Clean(opts.TargetDir), "foo")
-		err := os.Mkdir(opts.TargetDir, 0o755)
+		err := os.Mkdir(opts.TargetDir, 0755)
 		c.Assert(err, IsNil)
 	},
 	release: map[string]string{
@@ -1458,7 +1457,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Producing a manifest is not mandatory",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	hackopt: func(c *C, opts *slicer.RunOptions) {
 		// Remove the manifest slice that the tests add automatically.
 		var index int
@@ -1480,7 +1479,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "No valid archives defined due to invalid pro value",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	release: map[string]string{
 		"chisel.yaml": `
 			format: v1
@@ -1507,15 +1506,14 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Valid hard link in two slices in the same package",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "slice1"},
-		{Package: "test-package", Slice: "slice2"},
-	},
+		{"test-package", "slice1"},
+		{"test-package", "slice2"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file", "foo"),
-			testutil.Hrd(0o644, "./hardlink", "./file"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file", "foo"),
+			testutil.Hrd(0644, "./hardlink", "./file"),
 		}),
 	}},
 	release: map[string]string{
@@ -1542,15 +1540,14 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Hard link entries can be extracted without extracting the regular file",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
-	},
+		{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file", "foo"),
-			testutil.Hrd(0o644, "./hardlink1", "./file"),
-			testutil.Hrd(0o644, "./hardlink2", "./file"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file", "foo"),
+			testutil.Hrd(0644, "./hardlink1", "./file"),
+			testutil.Hrd(0644, "./hardlink2", "./file"),
 		}),
 	}},
 	release: map[string]string{
@@ -1573,16 +1570,15 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Hard link identifier for different groups",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
-	},
+		{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file1", "text for file1"),
-			testutil.Reg(0o644, "./file2", "text for file2"),
-			testutil.Hrd(0o644, "./hardlink1", "./file1"),
-			testutil.Hrd(0o644, "./hardlink2", "./file2"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file1", "text for file1"),
+			testutil.Reg(0644, "./file2", "text for file2"),
+			testutil.Hrd(0644, "./hardlink1", "./file1"),
+			testutil.Hrd(0644, "./hardlink2", "./file2"),
 		}),
 	}},
 	release: map[string]string{
@@ -1609,14 +1605,13 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Single hard link entry can be extracted without regular file and no hard links are created",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
-	},
+		{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file", "foo"),
-			testutil.Hrd(0o644, "./hardlink", "./file"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file", "foo"),
+			testutil.Hrd(0644, "./hardlink", "./file"),
 		}),
 	}},
 	release: map[string]string{
@@ -1637,16 +1632,15 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Hard link to symlink does not follow symlink",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
-	},
+		{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file", "foo"),
-			testutil.Lnk(0o644, "./symlink", "./file"),
-			testutil.Hrd(0o644, "./hardlink", "./symlink"),
+			testutil.Dir(0755, "./"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file", "foo"),
+			testutil.Lnk(0644, "./symlink", "./file"),
+			testutil.Hrd(0644, "./hardlink", "./symlink"),
 		}),
 	}},
 	release: map[string]string{
@@ -1670,22 +1664,22 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Hard link identifiers are unique across packages",
 	slices: []setup.SliceKey{
-		{Package: "test-package1", Slice: "myslice"},
-		{Package: "test-package2", Slice: "myslice"},
+		{"test-package1", "myslice"},
+		{"test-package2", "myslice"},
 	},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package1",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file1", "foo"),
-			testutil.Hrd(0o644, "./hardlink1", "./file1"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file1", "foo"),
+			testutil.Hrd(0644, "./hardlink1", "./file1"),
 		}),
 	}, {
 		Name: "test-package2",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file2", "foo"),
-			testutil.Hrd(0o644, "./hardlink2", "./file2"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file2", "foo"),
+			testutil.Hrd(0644, "./hardlink2", "./file2"),
 		}),
 	}},
 	release: map[string]string{
@@ -1721,14 +1715,13 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Mutations for hard links are forbidden",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
-	},
+		{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file", "foo"),
-			testutil.Hrd(0o644, "./hardlink", "./file"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file", "foo"),
+			testutil.Hrd(0644, "./hardlink", "./file"),
 		}),
 	}},
 	release: map[string]string{
@@ -1747,14 +1740,13 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Hard links can be marked as mutable, but not mutated",
 	slices: []setup.SliceKey{
-		{Package: "test-package", Slice: "myslice"},
-	},
+		{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file", "foo"),
-			testutil.Hrd(0o644, "./hardlink", "./file"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file", "foo"),
+			testutil.Hrd(0644, "./hardlink", "./file"),
 		}),
 	}},
 	release: map[string]string{
@@ -1777,12 +1769,12 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Hard links cannot escape the target directory",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Hrd(0o644, "./hardlink", "/etc/group"),
+			testutil.Dir(0755, "./"),
+			testutil.Hrd(0644, "./hardlink", "/etc/group"),
 		}),
 	}},
 	release: map[string]string{
@@ -1797,12 +1789,12 @@ var slicerTests = []slicerTest{{
 	error: `cannot extract from package "test-package": invalid link target /etc/group`,
 }, {
 	summary: "Cannot extract outside of target directory",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./../file", "hijacking system file"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./../file", "hijacking system file"),
 		}),
 	}},
 	release: map[string]string{
@@ -1818,25 +1810,25 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Extract conflicting paths with prefer from proper package",
 	slices: []setup.SliceKey{
-		{Package: "test-package1", Slice: "myslice"},
-		{Package: "test-package2", Slice: "myslice"},
+		{"test-package1", "myslice"},
+		{"test-package2", "myslice"},
 	},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package1",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file", "foo"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file", "foo"),
 		}),
 	}, {
 		Name: "test-package2",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
-			testutil.Reg(0o644, "./file", "bar"),
+			testutil.Dir(0755, "./"),
+			testutil.Reg(0644, "./file", "bar"),
 		}),
 	}, {
 		Name: "test-package3",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
+			testutil.Dir(0755, "./"),
 		}),
 	}},
 	release: map[string]string{
@@ -1879,24 +1871,24 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Warning when implicit parent directories conflict",
 	slices: []setup.SliceKey{
-		{Package: "test-package1", Slice: "myslice"},
-		{Package: "test-package2", Slice: "myslice"},
+		{"test-package1", "myslice"},
+		{"test-package2", "myslice"},
 	},
 	pkgs: []*testutil.TestPackage{{
 		Name: "test-package1",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
+			testutil.Dir(0755, "./"),
 			// Note that both implicit parents have different permissions.
-			testutil.Dir(0o766, "./parent/"),
-			testutil.Reg(0o644, "./parent/foo", "whatever"),
+			testutil.Dir(0766, "./parent/"),
+			testutil.Reg(0644, "./parent/foo", "whatever"),
 		}),
 	}, {
 		Name: "test-package2",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
-			testutil.Dir(0o755, "./"),
+			testutil.Dir(0755, "./"),
 			// And here.
-			testutil.Dir(0o755, "./parent/"),
-			testutil.Reg(0o644, "./parent/bar", "whatever"),
+			testutil.Dir(0755, "./parent/"),
+			testutil.Reg(0644, "./parent/bar", "whatever"),
 		}),
 	}},
 	release: map[string]string{
@@ -1918,7 +1910,7 @@ var slicerTests = []slicerTest{{
 	logOutput: `(?s).*Warning: Path "/parent/" has diverging modes in different packages\. Please report\..*`,
 }, {
 	summary: "Arch specific slice is not installed when it does not match requested arch",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	arch:    "amd64",
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1937,7 +1929,7 @@ var slicerTests = []slicerTest{{
 	manifestPaths: map[string]string{},
 }, {
 	summary: "Arch specific slice is installed when it matches requested arch",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "myslice"}},
+	slices:  []setup.SliceKey{{"test-package", "myslice"}},
 	arch:    "arm64",
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1961,7 +1953,7 @@ var slicerTests = []slicerTest{{
 	},
 }, {
 	summary: "Transitive essential",
-	slices:  []setup.SliceKey{{Package: "test-package", Slice: "first"}},
+	slices:  []setup.SliceKey{{"test-package", "first"}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -2057,9 +2049,9 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 			releaseDir := c.MkDir()
 			for path, data := range test.release {
 				fpath := filepath.Join(releaseDir, path)
-				err := os.MkdirAll(filepath.Dir(fpath), 0o755)
+				err := os.MkdirAll(filepath.Dir(fpath), 0755)
 				c.Assert(err, IsNil)
-				err = os.WriteFile(fpath, testutil.Reindent(data), 0o644)
+				err = os.WriteFile(fpath, testutil.Reindent(data), 0644)
 				c.Assert(err, IsNil)
 			}
 
@@ -2237,9 +2229,9 @@ func readManifest(c *C, targetDir, manifestPath string) *manifest.Manifest {
 	// in the manifest itself.
 	s, err := os.Stat(path.Join(targetDir, manifestPath))
 	c.Assert(err, IsNil)
-	c.Assert(s.Mode(), Equals, fs.FileMode(0o644))
+	c.Assert(s.Mode(), Equals, fs.FileMode(0644))
 	err = mfest.IteratePaths(manifestPath, func(p *manifest.Path) error {
-		c.Assert(p.Mode, Equals, fmt.Sprintf("%#o", fs.FileMode(0o644)))
+		c.Assert(p.Mode, Equals, fmt.Sprintf("%#o", fs.FileMode(0644)))
 		return nil
 	})
 	c.Assert(err, IsNil)

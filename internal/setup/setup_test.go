@@ -160,7 +160,7 @@ var setupTests = []setupTest{{
 						Package: "mypkg",
 						Name:    "myslice2",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "mypkg", Slice: "myslice1"}: {},
+							{"mypkg", "myslice1"}: {},
 						},
 						Contents: map[string]setup.PathInfo{
 							"/another/path": {Kind: "copy"},
@@ -426,7 +426,7 @@ var setupTests = []setupTest{{
 				myslice2: {essential: [mypkg1_myslice1]}
 		`,
 	},
-	selslices: []setup.SliceKey{{Package: "mypkg1", Slice: "myslice1"}},
+	selslices: []setup.SliceKey{{"mypkg1", "myslice1"}},
 	selection: &setup.Selection{
 		Slices: []*setup.Slice{{
 			Package: "mypkg1",
@@ -449,7 +449,7 @@ var setupTests = []setupTest{{
 				myslice2: {essential: [mypkg1_myslice1]}
 		`,
 	},
-	selslices: []setup.SliceKey{{Package: "mypkg2", Slice: "myslice2"}},
+	selslices: []setup.SliceKey{{"mypkg2", "myslice2"}},
 	selection: &setup.Selection{
 		Slices: []*setup.Slice{{
 			Package: "mypkg1",
@@ -458,7 +458,7 @@ var setupTests = []setupTest{{
 			Package: "mypkg2",
 			Name:    "myslice2",
 			Essential: map[setup.SliceKey]setup.EssentialInfo{
-				{Package: "mypkg1", Slice: "myslice1"}: {},
+				{"mypkg1", "myslice1"}: {},
 			},
 		}},
 	},
@@ -488,7 +488,7 @@ var setupTests = []setupTest{{
 						/path3: {symlink: /link}
 		`,
 	},
-	selslices: []setup.SliceKey{{Package: "mypkg1", Slice: "myslice1"}, {Package: "mypkg1", Slice: "myslice2"}, {Package: "mypkg2", Slice: "myslice1"}},
+	selslices: []setup.SliceKey{{"mypkg1", "myslice1"}, {"mypkg1", "myslice2"}, {"mypkg2", "myslice1"}},
 }, {
 	summary: "Conflicting paths across slices",
 	input: map[string]string{
@@ -1486,7 +1486,7 @@ var setupTests = []setupTest{{
 						Package: "mypkg",
 						Name:    "slice1",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "mypkg", Slice: "slice2"}: {},
+							{"mypkg", "slice2"}: {},
 						},
 					},
 					"slice2": {
@@ -1497,16 +1497,16 @@ var setupTests = []setupTest{{
 						Package: "mypkg",
 						Name:    "slice3",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "mypkg", Slice: "slice2"}: {},
-							{Package: "mypkg", Slice: "slice1"}: {},
-							{Package: "mypkg", Slice: "slice4"}: {},
+							{"mypkg", "slice2"}: {},
+							{"mypkg", "slice1"}: {},
+							{"mypkg", "slice4"}: {},
 						},
 					},
 					"slice4": {
 						Package: "mypkg",
 						Name:    "slice4",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "mypkg", Slice: "slice2"}: {},
+							{"mypkg", "slice2"}: {},
 						},
 					},
 				},
@@ -1560,16 +1560,16 @@ var setupTests = []setupTest{{
 						Package: "mypkg",
 						Name:    "slice1",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "myotherpkg", Slice: "slice2"}: {},
-							{Package: "mypkg", Slice: "slice2"}:      {},
-							{Package: "myotherpkg", Slice: "slice1"}: {},
+							{"myotherpkg", "slice2"}: {},
+							{"mypkg", "slice2"}:      {},
+							{"myotherpkg", "slice1"}: {},
 						},
 					},
 					"slice2": {
 						Package: "mypkg",
 						Name:    "slice2",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "myotherpkg", Slice: "slice2"}: {},
+							{"myotherpkg", "slice2"}: {},
 						},
 					},
 				},
@@ -1756,7 +1756,7 @@ var setupTests = []setupTest{{
 			EndOfLife: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC),
 		},
 	},
-	selslices: []setup.SliceKey{{Package: "mypkg", Slice: "myslice"}},
+	selslices: []setup.SliceKey{{"mypkg", "myslice"}},
 	selection: &setup.Selection{
 		Slices: []*setup.Slice{{
 			Package: "mypkg",
@@ -1810,7 +1810,7 @@ var setupTests = []setupTest{{
 			EndOfLife: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC),
 		},
 	},
-	selslices: []setup.SliceKey{{Package: "mypkg", Slice: "myslice"}},
+	selslices: []setup.SliceKey{{"mypkg", "myslice"}},
 	selerror:  `slice mypkg_myslice has invalid 'generate' for path /dir/\*\*: "foo"`,
 }, {
 	summary: "Paths with generate: manifest must have trailing /**",
@@ -2431,10 +2431,10 @@ var setupTests = []setupTest{{
 }, {
 	summary: "Path conflicts with 'prefer'",
 	selslices: []setup.SliceKey{
-		{Package: "mypkg1", Slice: "myslice1"},
-		{Package: "mypkg1", Slice: "myslice2"},
-		{Package: "mypkg2", Slice: "myslice1"},
-		{Package: "mypkg3", Slice: "myslice1"},
+		{"mypkg1", "myslice1"},
+		{"mypkg1", "myslice2"},
+		{"mypkg2", "myslice1"},
+		{"mypkg3", "myslice1"},
 	},
 	input: map[string]string{
 		"slices/mydir/mypkg1.yaml": `
@@ -2541,9 +2541,9 @@ var setupTests = []setupTest{{
 }, {
 	summary: "Path conflicts with 'prefer' depends on selection",
 	selslices: []setup.SliceKey{
-		{Package: "mypkg1", Slice: "myslice1"},
-		{Package: "mypkg1", Slice: "myslice2"},
-		{Package: "mypkg2", Slice: "myslice1"},
+		{"mypkg1", "myslice1"},
+		{"mypkg1", "myslice2"},
+		{"mypkg2", "myslice1"},
 	},
 	input: map[string]string{
 		"slices/mydir/mypkg1.yaml": `
@@ -3699,24 +3699,24 @@ var setupTests = []setupTest{{
 						Package: "mypkg",
 						Name:    "myslice1",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "mypkg", Slice: "myslice2"}: {Arch: []string{"amd64"}},
-							{Package: "mypkg", Slice: "myslice3"}: {Arch: []string{"amd64", "arm64"}},
-							{Package: "mypkg", Slice: "myslice4"}: {Arch: []string{"amd64", "i386"}},
-							{Package: "mypkg", Slice: "myslice5"}: {Arch: nil},
+							{"mypkg", "myslice2"}: {Arch: []string{"amd64"}},
+							{"mypkg", "myslice3"}: {Arch: []string{"amd64", "arm64"}},
+							{"mypkg", "myslice4"}: {Arch: []string{"amd64", "i386"}},
+							{"mypkg", "myslice5"}: {Arch: nil},
 						},
 					},
 					"myslice2": {
 						Package: "mypkg",
 						Name:    "myslice2",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "mypkg", Slice: "myslice4"}: {Arch: []string{"amd64", "i386"}},
+							{"mypkg", "myslice4"}: {Arch: []string{"amd64", "i386"}},
 						},
 					},
 					"myslice3": {
 						Package: "mypkg",
 						Name:    "myslice3",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "mypkg", Slice: "myslice4"}: {Arch: []string{"amd64", "i386"}},
+							{"mypkg", "myslice4"}: {Arch: []string{"amd64", "i386"}},
 						},
 					},
 					"myslice4": {
@@ -3728,7 +3728,7 @@ var setupTests = []setupTest{{
 						Package: "mypkg",
 						Name:    "myslice5",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
-							{Package: "mypkg", Slice: "myslice4"}: {Arch: []string{"amd64", "i386"}},
+							{"mypkg", "myslice4"}: {Arch: []string{"amd64", "i386"}},
 						},
 					},
 				},
@@ -4507,16 +4507,16 @@ func (s *S) TestPackageMarshalYAML(c *C) {
 		dir := c.MkDir()
 		// Write chisel.yaml.
 		fpath := filepath.Join(dir, "chisel.yaml")
-		err := os.WriteFile(fpath, testutil.Reindent(data), 0o644)
+		err := os.WriteFile(fpath, testutil.Reindent(data), 0644)
 		c.Assert(err, IsNil)
 		// Write the packages YAML.
 		for _, pkg := range test.release.Packages {
 			fpath = filepath.Join(dir, pkg.Path)
-			err = os.MkdirAll(filepath.Dir(fpath), 0o755)
+			err = os.MkdirAll(filepath.Dir(fpath), 0755)
 			c.Assert(err, IsNil)
 			pkgData, err := yaml.Marshal(pkg)
 			c.Assert(err, IsNil)
-			err = os.WriteFile(fpath, testutil.Reindent(string(pkgData)), 0o644)
+			err = os.WriteFile(fpath, testutil.Reindent(string(pkgData)), 0644)
 			c.Assert(err, IsNil)
 		}
 
@@ -4529,7 +4529,7 @@ func (s *S) TestPackageMarshalYAML(c *C) {
 }
 
 func (s *S) TestPackageYAMLFormat(c *C) {
-	tests := []struct {
+	var tests = []struct {
 		summary  string
 		input    map[string]string
 		expected map[string]string
@@ -4724,9 +4724,9 @@ func (s *S) TestPackageYAMLFormat(c *C) {
 		dir := c.MkDir()
 		for path, data := range test.input {
 			fpath := filepath.Join(dir, path)
-			err := os.MkdirAll(filepath.Dir(fpath), 0o755)
+			err := os.MkdirAll(filepath.Dir(fpath), 0755)
 			c.Assert(err, IsNil)
-			err = os.WriteFile(fpath, testutil.Reindent(data), 0o644)
+			err = os.WriteFile(fpath, testutil.Reindent(data), 0644)
 			c.Assert(err, IsNil)
 		}
 
@@ -4812,7 +4812,7 @@ func (s *S) TestSelectEmptyArch(c *C) {
 	release, err := setup.ReadRelease(dir)
 	c.Assert(err, IsNil)
 
-	selslice := []setup.SliceKey{{Package: "mypkg", Slice: "myslice"}}
+	selslice := []setup.SliceKey{{"mypkg", "myslice"}}
 	selection, err := setup.Select(release, selslice, "")
 	c.Assert(err, IsNil)
 
