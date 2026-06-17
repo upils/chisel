@@ -352,16 +352,6 @@ func (r *Release) validate() error {
 		}
 	}
 
-	// Check that stores referenced in packages are defined.
-	for _, pkg := range r.Packages {
-		if pkg.Store == "" {
-			continue
-		}
-		if _, ok := r.Stores[pkg.Store]; !ok {
-			return fmt.Errorf("%s: package refers to undefined store %q", pkg.Path, pkg.Store)
-		}
-	}
-
 	return nil
 }
 

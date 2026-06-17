@@ -4149,7 +4149,7 @@ var setupTests = []setupTest{{
 			default-track: "3.0"
 		`,
 	},
-	relerror: `slices/bin/mypkg.yaml: package refers to undefined store "no-such-store"`,
+	relerror: `cannot parse package "mypkg": store "no-such-store" not defined in release`,
 }, {
 	summary: "Store missing version",
 	input: map[string]string{
