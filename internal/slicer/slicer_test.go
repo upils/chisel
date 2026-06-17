@@ -2017,6 +2017,62 @@ func (s *S) TestRun(c *C) {
 	runSlicerTests(s, c, v2FormatTests)
 }
 
+var storeSlicerTests = []slicerTest{{
+	summary: "Store package is skipped when fetching is not implemented",
+	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"bin-store-pkg", "myslice"}},
+	arch:    "amd64",
+	release: map[string]string{
+		"chisel.yaml": `
+			format: v3
+			maintenance:
+				standard: 2025-01-01
+				end-of-life: 2100-01-01
+			archives:
+				ubuntu:
+					version: 22.04
+					components: [main, universe]
+					suites: [jammy]
+					public-keys: [test-key]
+			stores:
+				test-store:
+					kind: test
+					version: 1.0
+					default-prefix: bin-
+			public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+		`,
+		"slices/mydir/test-package.yaml": `
+			package: test-package
+			slices:
+				myslice:
+					contents:
+						/dir/file:
+		`,
+		"slices/mydir/store-pkg.yaml": `
+			package: store-pkg
+			store: test-store
+			default-track: stable
+			slices:
+				myslice:
+					contents:
+						/dir/store-file:
+		`,
+	},
+	filesystem: map[string]string{
+		"/dir/":     "dir 0755",
+		"/dir/file": "file 0644 cc55e2ec",
+	},
+	manifestPaths: map[string]string{
+		"/dir/file": "file 0644 cc55e2ec {test-package_myslice}",
+	},
+}}
+
+func (s *S) TestRunStorePackage(c *C) {
+	runSlicerTests(s, c, storeSlicerTests)
+}
+
 func runSlicerTests(s *S, c *C, tests []slicerTest) {
 	for _, test := range tests {
 		for _, testSlices := range testutil.Permutations(test.slices) {
