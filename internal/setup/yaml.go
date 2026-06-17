@@ -515,7 +515,7 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 		store, ok := release.Stores[pkg.Store]
 		if !ok {
 			return nil, fmt.Errorf("cannot parse package %q: store %q not defined in release", pkgName, pkg.Store)
-		}	
+		}
 		prefix = store.DefaultPrefix
 	}
 	pkg.Name = prefix + pkgName
