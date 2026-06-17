@@ -453,6 +453,9 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 		if details.Kind == "" {
 			return nil, fmt.Errorf("%s: store %q missing kind field", fileName, storeName)
 		}
+		if details.Kind != "bin" {
+			return nil, fmt.Errorf("%s: unknown store kind %q for store %q", fileName, details.Kind, storeName)
+		}
 		if details.Version == "" {
 			return nil, fmt.Errorf("%s: store %q missing version field", fileName, storeName)
 		}

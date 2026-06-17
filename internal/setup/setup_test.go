@@ -4176,6 +4176,32 @@ var setupTests = []setupTest{{
 	},
 	relerror: `chisel.yaml: store "bin" missing version field`,
 }, {
+	summary: "Store unknown kind",
+	input: map[string]string{
+		"chisel.yaml": `
+			format: v3
+			maintenance:
+				standard: 2025-01-01
+				end-of-life: 2100-01-01
+			archives:
+				ubuntu:
+					version: 26.10
+					components: [main, universe]
+					suites: [stonking]
+					public-keys: [test-key]
+			public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+			stores:
+				bin:
+					kind: unknown
+					version: 26.10
+					default-prefix: "bin-"
+		`,
+	},
+	relerror: `chisel.yaml: unknown store kind "unknown" for store "bin"`,
+}, {
 	summary: "Store missing default-prefix",
 	input: map[string]string{
 		"chisel.yaml": `
