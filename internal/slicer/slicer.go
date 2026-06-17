@@ -45,7 +45,7 @@ const (
 )
 
 // pkgSourceInfo records the resolved source for a package in the selection.
-// It abstracts over archive and store packages
+// It abstracts over archive and store packages.
 type pkgSourceInfo struct {
 	arch    string
 	kind    sourceKind
