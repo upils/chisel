@@ -2035,7 +2035,7 @@ var storeSlicerTests = []slicerTest{{
 					public-keys: [test-key]
 			stores:
 				test-store:
-					kind: test
+					kind: bin
 					version: 1.0
 					default-prefix: bin-
 			public-keys:
