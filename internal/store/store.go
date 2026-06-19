@@ -1,0 +1,274 @@
+package store
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/canonical/chisel/internal/cache"
+	"github.com/canonical/chisel/internal/deb"
+)
+
+// Store provides access to bin packages from the Snapcraft store API.
+type Store interface {
+	Fetch(name, track, risk string) (io.ReadSeekCloser, *BinPackageInfo, error)
+	Exists(name, track, risk string) bool
+	Info(name, track, risk string) (*BinPackageInfo, error)
+}
+
+// BinPackageInfo holds metadata about a bin package.
+type BinPackageInfo struct {
+	Name     string
+	Version  string
+	Revision int
+	SHA384   string
+}
+
+// Options configures a bin source.
+type Options struct {
+	Arch     string
+	CacheDir string
+}
+
+type binStore struct {
+	options Options
+	cache   *cache.Cache
+	apiURL  string
+}
+
+const (
+	binsAPIBase    = "https://api.snapcraft.io/v2/bins"
+	binsAPIStaging = "https://api.staging.snapcraft.io/v2/bins"
+	stagingEnvVar  = "CHISEL_BINS_STAGING"
+)
+
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
+
+var httpDo = httpClient.Do
+
+var bulkClient = &http.Client{
+	Timeout: 5 * time.Minute,
+}
+
+var bulkDo = bulkClient.Do
+
+// Open creates a new bin source with the given options.
+func Open(options *Options) (Store, error) {
+	var err error
+	if options.Arch == "" {
+		options.Arch, err = deb.InferArch()
+	} else {
+		err = deb.ValidateArch(options.Arch)
+	}
+	if err != nil {
+		return nil, err
+	}
+	apiURL := binsAPIBase
+	if os.Getenv(stagingEnvVar) != "" {
+		apiURL = binsAPIStaging
+	}
+	return &binStore{
+		options: *options,
+		cache:   &cache.Cache{Dir: options.CacheDir},
+		apiURL:  apiURL,
+	}, nil
+}
+
+// binInfoResponse represents the JSON response from the bins info endpoint.
+type binInfoResponse struct {
+	Name       string `json:"name"`
+	PackageID  string `json:"package-id"`
+	ChannelMap []struct {
+		Channel struct {
+			Name     string `json:"name"`
+			Risk     string `json:"risk"`
+			Track    string `json:"track"`
+			Platform struct {
+				Architecture string `json:"architecture"`
+			} `json:"platform"`
+		} `json:"channel"`
+		Revision struct {
+			Version  string `json:"version"`
+			Revision int    `json:"revision"`
+			Download struct {
+				URL     string `json:"url"`
+				SHA3384 string `json:"sha3-384"`
+				Size    int64  `json:"size"`
+			} `json:"download"`
+			Platforms []struct {
+				Architecture string `json:"architecture"`
+			} `json:"platforms"`
+		} `json:"revision"`
+	} `json:"channel-map"`
+}
+
+func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
+	infoURL, err := url.JoinPath(s.apiURL, "info", name)
+	if err != nil {
+		return nil, fmt.Errorf("internal error: cannot construct bins API URL: %v", err)
+	}
+	infoURL += "?fields=download,version,revision,channel-map"
+
+	req, err := http.NewRequest("GET", infoURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create HTTP request: %v", err)
+	}
+
+	resp, err := httpDo(req)
+	if err != nil {
+		return nil, fmt.Errorf("cannot talk to bins API: %v", err)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case 200:
+		// ok
+	case 404:
+		return nil, fmt.Errorf("bin %q not found", name)
+	default:
+		return nil, fmt.Errorf("cannot fetch from bins API: %v", resp.Status)
+	}
+
+	var info binInfoResponse
+	err = json.NewDecoder(resp.Body).Decode(&info)
+	if err != nil {
+		return nil, fmt.Errorf("cannot decode bins API response: %v", err)
+	}
+	return &info, nil
+}
+
+// selectRevision finds the channel-map entry matching the requested track,
+// risk, and architecture.
+func selectRevision(info *binInfoResponse, arch, track, risk string) (downloadURL, sha3384, version string, revision int, err error) {
+	for _, entry := range info.ChannelMap {
+		if entry.Channel.Track != track || entry.Channel.Risk != risk {
+			continue
+		}
+		if entry.Channel.Platform.Architecture != arch {
+			continue
+		}
+		return entry.Revision.Download.URL, entry.Revision.Download.SHA3384,
+			entry.Revision.Version, entry.Revision.Revision, nil
+	}
+	return "", "", "", 0, fmt.Errorf("bin %q has no %s/%s release for architecture %q", info.Name, track, risk, arch)
+}
+
+// allowedDownloadHosts lists the hosts from which bin downloads are permitted.
+var allowedDownloadHosts = []string{
+	"api.snapcraft.io",
+	"api.staging.snapcraft.io",
+	"storage.snapcraftcontent.com",
+}
+
+// validateDownloadURL checks that the download URL is HTTPS and from an
+// allowed host.
+func validateDownloadURL(downloadURL string) error {
+	u, err := url.Parse(downloadURL)
+	if err != nil {
+		return fmt.Errorf("cannot parse bin download URL: %v", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("bin download URL must use HTTPS: %q", downloadURL)
+	}
+	for _, host := range allowedDownloadHosts {
+		if u.Host == host || strings.HasSuffix(u.Host, "."+host) {
+			return nil
+		}
+	}
+	return fmt.Errorf("bin download URL has untrusted host %q", u.Host)
+}
+
+func (s *binStore) Info(name, track, risk string) (*BinPackageInfo, error) {
+	resp, err := s.fetchBinInfo(name)
+	if err != nil {
+		return nil, err
+	}
+	_, sha384, version, revision, err := selectRevision(resp, s.options.Arch, track, risk)
+	if err != nil {
+		return nil, err
+	}
+	return &BinPackageInfo{
+		Name:     name,
+		Version:  version,
+		Revision: revision,
+		SHA384:   sha384,
+	}, nil
+}
+
+func (s *binStore) Exists(name, track, risk string) bool {
+	_, err := s.Info(name, track, risk)
+	return err == nil
+}
+
+func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *BinPackageInfo, error) {
+	logf("Fetching bin %s %s/%s ...", name, track, risk)
+
+	resp, err := s.fetchBinInfo(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	downloadURL, sha384, version, revision, err := selectRevision(resp, s.options.Arch, track, risk)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	info := &BinPackageInfo{
+		Name:     name,
+		Version:  version,
+		Revision: revision,
+		SHA384:   sha384,
+	}
+
+	// Check cache first.
+	reader, err := s.cache.Open(cache.SHA384, sha384)
+	if err == nil {
+		logf("Using cached bin %s", name)
+		return reader, info, nil
+	} else if err != cache.ErrMiss {
+		return nil, nil, err
+	}
+
+	// Download the bin.
+	err = validateDownloadURL(downloadURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	req, err := http.NewRequest("GET", downloadURL, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot create HTTP request: %v", err)
+	}
+
+	httpResp, err := bulkDo(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot download bin %q: %v", name, err)
+	}
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != 200 {
+		return nil, nil, fmt.Errorf("cannot download bin %q: %v", name, httpResp.Status)
+	}
+
+	writer := s.cache.Create(cache.SHA384, sha384)
+	defer writer.Close()
+
+	_, err = io.Copy(writer, httpResp.Body)
+	if err == nil {
+		err = writer.Close()
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot fetch bin %q: %v", name, err)
+	}
+
+	reader, err = s.cache.Open(cache.SHA384, sha384)
+	if err != nil {
+		return nil, nil, err
+	}
+	return reader, info, nil
+}

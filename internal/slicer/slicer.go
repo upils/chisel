@@ -16,6 +16,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/canonical/chisel/internal/archive"
+	"github.com/canonical/chisel/internal/store"
 	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/manifestutil"
@@ -28,6 +29,7 @@ const manifestMode fs.FileMode = 0644
 type RunOptions struct {
 	Selection *setup.Selection
 	Archives  map[string]archive.Archive
+	Stores    map[string]store.Store
 	TargetDir string
 }
 

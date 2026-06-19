@@ -8,6 +8,7 @@ import (
 	"github.com/jessevdk/go-flags"
 
 	"github.com/canonical/chisel/internal/archive"
+	"github.com/canonical/chisel/internal/store"
 	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
@@ -121,9 +122,23 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
+	stores := make(map[string]store.Store)
+	for _, storeInfo := range release.Stores {
+		openStore, err := store.Open(&store.Options{
+			Arch:     cmd.Arch,
+			CacheDir: cache.DefaultDir("chisel"),
+		})
+		if err != nil {
+			return err
+		}
+		stores[storeInfo.Name] = openStore
+		break
+	}
+
 	err = slicer.Run(&slicer.RunOptions{
 		Selection: selection,
 		Archives:  archives,
+		Stores:    stores,
 		TargetDir: cmd.RootDir,
 	})
 	return err
