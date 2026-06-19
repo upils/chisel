@@ -127,6 +127,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 		openStore, err := store.Open(&store.Options{
 			Arch:     cmd.Arch,
 			CacheDir: cache.DefaultDir("chisel"),
+			Kind:     storeInfo.Kind,
 		})
 		if err != nil {
 			return err
