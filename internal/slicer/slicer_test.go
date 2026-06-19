@@ -1978,46 +1978,7 @@ var slicerTests = []slicerTest{{
 	manifestPaths: map[string]string{
 		"/dir/file": "file 0644 cc55e2ec {test-package_third}",
 	},
-}}
-
-func (s *S) TestRun(c *C) {
-	// Run tests for "archives" field in "v1" format.
-	runSlicerTests(s, c, slicerTests)
-
-	// Run tests for "v2-archives" field in "v1" format.
-	v2ArchiveTests := make([]slicerTest, 0, len(slicerTests))
-	for _, t := range slicerTests {
-		m := make(map[string]string)
-		for k, v := range t.release {
-			if !strings.Contains(v, "v2-archives:") {
-				v = strings.ReplaceAll(v, "archives:", "v2-archives:")
-			}
-			m[k] = v
-		}
-		t.release = m
-		v2ArchiveTests = append(v2ArchiveTests, t)
-	}
-	runSlicerTests(s, c, v2ArchiveTests)
-
-	// Run tests for "v2" format.
-	v2FormatTests := make([]slicerTest, 0, len(slicerTests))
-	for _, t := range slicerTests {
-		m := make(map[string]string)
-		for k, v := range t.release {
-			if strings.Contains(v, "format: v1") &&
-				!strings.Contains(v, "v2-archives:") &&
-				!strings.Contains(v, "default: true") {
-				v = strings.ReplaceAll(v, "format: v1", "format: v2")
-			}
-			m[k] = v
-		}
-		t.release = m
-		v2FormatTests = append(v2FormatTests, t)
-	}
-	runSlicerTests(s, c, v2FormatTests)
-}
-
-var storeSlicerTests = []slicerTest{{
+}, {
 	summary: "Store package is skipped when fetching is not implemented",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"bin-store-pkg", "myslice"}},
 	arch:    "amd64",
@@ -2049,8 +2010,41 @@ var storeSlicerTests = []slicerTest{{
 	},
 }}
 
-func (s *S) TestRunStorePackage(c *C) {
-	runSlicerTests(s, c, storeSlicerTests)
+func (s *S) TestRun(c *C) {
+	// Run tests for "archives" field in "v1" format.
+	runSlicerTests(s, c, slicerTests)
+
+	// Run tests for "v2-archives" field in "v1" format.
+	v2ArchiveTests := make([]slicerTest, 0, len(slicerTests))
+	for _, t := range slicerTests {
+		m := make(map[string]string)
+		for k, v := range t.release {
+			if !strings.Contains(v, "v2-archives:") && strings.Contains(v, "format: v1") {
+				v = strings.ReplaceAll(v, "archives:", "v2-archives:")
+			}
+			m[k] = v
+		}
+		t.release = m
+		v2ArchiveTests = append(v2ArchiveTests, t)
+	}
+	runSlicerTests(s, c, v2ArchiveTests)
+
+	// Run tests for "v2" format.
+	v2FormatTests := make([]slicerTest, 0, len(slicerTests))
+	for _, t := range slicerTests {
+		m := make(map[string]string)
+		for k, v := range t.release {
+			if strings.Contains(v, "format: v1") &&
+				!strings.Contains(v, "v2-archives:") &&
+				!strings.Contains(v, "default: true") {
+				v = strings.ReplaceAll(v, "format: v1", "format: v2")
+			}
+			m[k] = v
+		}
+		t.release = m
+		v2FormatTests = append(v2FormatTests, t)
+	}
+	runSlicerTests(s, c, v2FormatTests)
 }
 
 func runSlicerTests(s *S, c *C, tests []slicerTest) {
