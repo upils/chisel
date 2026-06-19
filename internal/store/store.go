@@ -14,26 +14,30 @@ import (
 	"github.com/canonical/chisel/internal/deb"
 )
 
-// Store provides access to bin packages from the Snapcraft store API.
+// Store provides access to packages from the Snapcraft store API.
 type Store interface {
-	Fetch(name, track, risk string) (io.ReadSeekCloser, *BinPackageInfo, error)
+	Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error)
 	Exists(name, track, risk string) bool
-	Info(name, track, risk string) (*BinPackageInfo, error)
+	Info(name, track, risk string) (*StorePackageInfo, error)
 }
 
-// BinPackageInfo holds metadata about a bin package.
-type BinPackageInfo struct {
+// StorePackageInfo holds metadata about a package.
+type StorePackageInfo struct {
 	Name     string
 	Version  string
 	Revision int
 	SHA384   string
 }
 
-// Options configures a bin source.
 type Options struct {
 	Arch     string
 	CacheDir string
+	Kind	 string
 }
+
+type storeKind string
+
+const storeKindBin storeKind = "bin"
 
 type binStore struct {
 	options Options
@@ -42,9 +46,9 @@ type binStore struct {
 }
 
 const (
-	binsAPIBase    = "https://api.snapcraft.io/v2/bins"
-	binsAPIStaging = "https://api.staging.snapcraft.io/v2/bins"
-	stagingEnvVar  = "CHISEL_BINS_STAGING"
+	binAPIBase    = "https://api.snapcraft.io/v2/bins"
+	binAPIStaging = "https://api.staging.snapcraft.io/v2/bins"
+	stagingEnvVar  = "CHISEL_BIN_STAGING"
 )
 
 var httpClient = &http.Client{
@@ -59,7 +63,6 @@ var bulkClient = &http.Client{
 
 var bulkDo = bulkClient.Do
 
-// Open creates a new bin source with the given options.
 func Open(options *Options) (Store, error) {
 	var err error
 	if options.Arch == "" {
@@ -70,15 +73,21 @@ func Open(options *Options) (Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	apiURL := binsAPIBase
-	if os.Getenv(stagingEnvVar) != "" {
-		apiURL = binsAPIStaging
+
+	switch storeKind(options.Kind) {
+	case storeKindBin:
+		apiURL := binAPIBase
+		if os.Getenv(stagingEnvVar) != "" {
+			apiURL = binAPIStaging
+		}
+		return &binStore{
+			options: *options,
+			cache:   &cache.Cache{Dir: options.CacheDir},
+			apiURL:  apiURL,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported store kind %q", options.Kind)
 	}
-	return &binStore{
-		options: *options,
-		cache:   &cache.Cache{Dir: options.CacheDir},
-		apiURL:  apiURL,
-	}, nil
 }
 
 // binInfoResponse represents the JSON response from the bins info endpoint.
@@ -185,7 +194,7 @@ func validateDownloadURL(downloadURL string) error {
 	return fmt.Errorf("bin download URL has untrusted host %q", u.Host)
 }
 
-func (s *binStore) Info(name, track, risk string) (*BinPackageInfo, error) {
+func (s *binStore) Info(name, track, risk string) (*StorePackageInfo, error) {
 	resp, err := s.fetchBinInfo(name)
 	if err != nil {
 		return nil, err
@@ -194,7 +203,7 @@ func (s *binStore) Info(name, track, risk string) (*BinPackageInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &BinPackageInfo{
+	return &StorePackageInfo{
 		Name:     name,
 		Version:  version,
 		Revision: revision,
@@ -207,7 +216,7 @@ func (s *binStore) Exists(name, track, risk string) bool {
 	return err == nil
 }
 
-func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *BinPackageInfo, error) {
+func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error) {
 	logf("Fetching bin %s %s/%s ...", name, track, risk)
 
 	resp, err := s.fetchBinInfo(name)
@@ -219,7 +228,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *BinPacka
 		return nil, nil, err
 	}
 
-	info := &BinPackageInfo{
+	info := &StorePackageInfo{
 		Name:     name,
 		Version:  version,
 		Revision: revision,
