@@ -13,10 +13,10 @@ import (
 	"golang.org/x/term"
 
 	"github.com/canonical/chisel/internal/archive"
-	"github.com/canonical/chisel/internal/store"
 	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
+	"github.com/canonical/chisel/internal/store"
 	//"github.com/canonical/chisel/internal/logger"
 )
 

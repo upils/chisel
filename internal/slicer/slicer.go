@@ -16,12 +16,12 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/canonical/chisel/internal/archive"
-	"github.com/canonical/chisel/internal/store"
 	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/scripts"
 	"github.com/canonical/chisel/internal/setup"
+	"github.com/canonical/chisel/internal/store"
 )
 
 const manifestMode fs.FileMode = 0644

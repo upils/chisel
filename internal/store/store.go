@@ -32,7 +32,7 @@ type StorePackageInfo struct {
 type Options struct {
 	Arch     string
 	CacheDir string
-	Kind	 string
+	Kind     string
 }
 
 type storeKind string
@@ -48,7 +48,7 @@ type binStore struct {
 const (
 	binAPIBase    = "https://api.snapcraft.io/v2/bins"
 	binAPIStaging = "https://api.staging.snapcraft.io/v2/bins"
-	stagingEnvVar  = "CHISEL_BIN_STAGING"
+	stagingEnvVar = "CHISEL_BIN_STAGING"
 )
 
 var httpClient = &http.Client{
