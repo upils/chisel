@@ -444,7 +444,7 @@ func parseRelease(baseDir, filePath string, data []byte) (*Release, error) {
 
 	// Parse stores.
 	if len(yamlVar.Stores) > 0 && (release.Format == "v1" || release.Format == "v2") {
-		return nil, fmt.Errorf("%s: cannot use stores in format %q", fileName, release.Format)
+		return nil, fmt.Errorf("%s: 'stores' is unsupported before format v3", fileName)
 	}
 	if len(yamlVar.Stores) > 0 {
 		release.Stores = make(map[string]*Store, len(yamlVar.Stores))
@@ -492,7 +492,7 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 	}
 
 	if (yamlPkg.Store != "" || yamlPkg.DefaultTrack != "") && (release.Format == "v1" || release.Format == "v2") {
-		return nil, fmt.Errorf("cannot parse package %q: 'store' and 'default-track' are not supported in format %q", pkgName, release.Format)
+		return nil, fmt.Errorf("cannot parse package %q: 'store' and 'default-track' are unsupported before format v3", pkgName)
 	}
 	if yamlPkg.Store != "" && yamlPkg.Archive != "" {
 		return nil, fmt.Errorf("cannot parse package %q: both 'store' and 'archive' fields are set", pkgName)

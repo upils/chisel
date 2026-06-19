@@ -3997,6 +3997,29 @@ var setupTests = []setupTest{{
 		},
 	},
 }, {
+	summary: "Store used with older format (v1/v2) is not allowed",
+	input: map[string]string{
+		"chisel.yaml": strings.ReplaceAll(testutil.DefaultChiselYaml, "format: v1", "format: v2"),
+		"slices/bin/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "3.0"
+		`,
+	},
+	relerror: `cannot parse package "mypkg": 'store' and 'default-track' are unsupported before format v3`,
+}, {
+	summary: "Store and archive are mutually exclusive",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"slices/bin/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			archive: ubuntu
+			default-track: "3.0"
+		`,
+	},
+	relerror: `cannot parse package "mypkg": both 'store' and 'archive' fields are set`,
+}, {
 	summary: "Store and archive are mutually exclusive",
 	input: map[string]string{
 		"chisel.yaml": `
@@ -4145,11 +4168,11 @@ var setupTests = []setupTest{{
 		`,
 		"slices/bin/mypkg.yaml": `
 			package: mypkg
-			store: no-such-store
+			store: non-existing
 			default-track: "3.0"
 		`,
 	},
-	relerror: `cannot parse package "mypkg": store "no-such-store" not defined in release`,
+	relerror: `cannot parse package "mypkg": store "non-existing" not defined in release`,
 }, {
 	summary: "Store missing version",
 	input: map[string]string{
@@ -4175,6 +4198,31 @@ var setupTests = []setupTest{{
 		`,
 	},
 	relerror: `chisel.yaml: store "bin" missing version field`,
+}, {
+	summary: "Store missing kind",
+	input: map[string]string{
+		"chisel.yaml": `
+			format: v3
+			maintenance:
+				standard: 2025-01-01
+				end-of-life: 2100-01-01
+			archives:
+				ubuntu:
+					version: 26.10
+					components: [main, universe]
+					suites: [stonking]
+					public-keys: [test-key]
+			public-keys:
+				test-key:
+					id: ` + testKey.ID + `
+					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
+			stores:
+				bin:
+					version: 26.10
+					default-prefix: "bin-"
+		`,
+	},
+	relerror: `chisel.yaml: store "bin" missing kind field`,
 }, {
 	summary: "Store unknown kind",
 	input: map[string]string{
@@ -4436,9 +4484,9 @@ func runParseReleaseTests(c *C, tests []setupTest) {
 		dir := c.MkDir()
 		for path, data := range test.input {
 			fpath := filepath.Join(dir, path)
-			err := os.MkdirAll(filepath.Dir(fpath), 0o755)
+			err := os.MkdirAll(filepath.Dir(fpath), 0755)
 			c.Assert(err, IsNil)
-			err = os.WriteFile(fpath, testutil.Reindent(data), 0o644)
+			err = os.WriteFile(fpath, testutil.Reindent(data), 0644)
 			c.Assert(err, IsNil)
 		}
 
@@ -4480,40 +4528,6 @@ func runParseReleaseTests(c *C, tests []setupTest) {
 				c.Assert(selection, DeepEquals, test.selection)
 			}
 		}
-	}
-}
-
-func (s *S) TestStoresNotSupportedInOldFormats(c *C) {
-	for _, format := range []string{"v1", "v2"} {
-		c.Logf("Format: %s", format)
-		chiselYaml := `
-			format: ` + format + `
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 22.04
-					components: [main, universe]
-					suites: [jammy]
-					public-keys: [test-key]
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-			stores:
-				bin:
-					kind: bin
-					version: 22.04
-					default-prefix: "bin-"
-		`
-		dir := c.MkDir()
-		err := os.WriteFile(filepath.Join(dir, "chisel.yaml"), testutil.Reindent(chiselYaml), 0o644)
-		c.Assert(err, IsNil)
-		err = os.MkdirAll(filepath.Join(dir, "slices"), 0o755)
-		c.Assert(err, IsNil)
-		_, err = setup.ReadRelease(dir)
-		c.Assert(err, ErrorMatches, `chisel.yaml: cannot use stores in format "`+format+`"`)
 	}
 }
 

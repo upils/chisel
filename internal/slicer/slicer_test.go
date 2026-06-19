@@ -2022,27 +2022,7 @@ var storeSlicerTests = []slicerTest{{
 	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"bin-store-pkg", "myslice"}},
 	arch:    "amd64",
 	release: map[string]string{
-		"chisel.yaml": `
-			format: v3
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 22.04
-					components: [main, universe]
-					suites: [jammy]
-					public-keys: [test-key]
-			stores:
-				test-store:
-					kind: bin
-					version: 1.0
-					default-prefix: bin-
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-		`,
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
 		"slices/mydir/test-package.yaml": `
 			package: test-package
 			slices:
@@ -2052,7 +2032,7 @@ var storeSlicerTests = []slicerTest{{
 		`,
 		"slices/mydir/store-pkg.yaml": `
 			package: store-pkg
-			store: test-store
+			store: bin
 			default-track: stable
 			slices:
 				myslice:
