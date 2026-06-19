@@ -583,9 +583,10 @@ func resolvePkgSources(archives map[string]archive.Archive, selection *setup.Sel
 		}
 	}
 
-	// Store packages do not have an archive to derive the architecture from.
-	// All packages in a selection share the same architecture, so we can
-	// borrow it from any archive package that was already resolved.
+	// Until a store is implemented as a package source there is no proper way to
+	// determine the architecture for store packages.
+	// So relying on the fact that all packages in a selection share the same architecture,
+	// we can borrow it from any archive package that was already resolved.
 	var arch string
 	for _, src := range pkgSources {
 		if src.kind == sourceArchive {
