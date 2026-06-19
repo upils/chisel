@@ -517,6 +517,21 @@ func Select(release *Release, slices []SliceKey, arch string) (*Selection, error
 					new, newPath, newInfo.Generate)
 			}
 		}
+		// An invalid store kind should only throw an error if a slice references it.
+		// Hence, the check is here.
+		pkg := release.Packages[new.Package]
+		if pkg.Store == "" {
+			continue
+		}
+		store, ok := selection.Release.Stores[pkg.Store]
+		if !ok {
+			return nil, fmt.Errorf("internal error: slice %s refers to missing store %q", new, pkg.Store)
+		}
+		switch store.Kind {
+		case "bin":
+		default:
+			return nil, fmt.Errorf("slice %s refers to store %q with unknown kind %q", new, pkg.Store, store.Kind)
+		}
 	}
 
 	return selection, nil

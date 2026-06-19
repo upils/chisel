@@ -4224,32 +4224,6 @@ var setupTests = []setupTest{{
 	},
 	relerror: `chisel.yaml: store "bin" missing kind field`,
 }, {
-	summary: "Store unknown kind",
-	input: map[string]string{
-		"chisel.yaml": `
-			format: v3
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 26.10
-					components: [main, universe]
-					suites: [stonking]
-					public-keys: [test-key]
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-			stores:
-				bin:
-					kind: unknown
-					version: 26.10
-					default-prefix: "bin-"
-		`,
-	},
-	relerror: `chisel.yaml: unknown store kind "unknown" for store "bin"`,
-}, {
 	summary: "Store missing default-prefix",
 	input: map[string]string{
 		"chisel.yaml": `
@@ -4468,6 +4442,48 @@ func (s *S) TestParseRelease(c *C) {
 		v3FormatTests = append(v3FormatTests, t)
 	}
 	runParseReleaseTests(c, v3FormatTests)
+}
+
+// TestSelectStoreUnknownKind is a dedicated test because the unknown store kind
+// is only reported at selection time and only makes sense for the v3 format.
+func (s *S) TestSelectStoreUnknownKind(c *C) {
+	runParseReleaseTests(c, []setupTest{{
+		summary:   "Store unknown kind",
+		selslices: []setup.SliceKey{{Package: "bin-mypkg", Slice: "myslice"}},
+		input: map[string]string{
+			"chisel.yaml": `
+				format: v3
+				maintenance:
+					standard: 2025-01-01
+					end-of-life: 2100-01-01
+				archives:
+					ubuntu:
+						version: 26.10
+						components: [main, universe]
+						suites: [stonking]
+						public-keys: [test-key]
+				public-keys:
+					test-key:
+						id: ` + testKey.ID + `
+						armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t\t") + `
+				stores:
+					bin:
+						kind: unknown
+						version: 26.10
+						default-prefix: "bin-"
+			`,
+			"slices/bin/mypkg.yaml": `
+				package: mypkg
+				store: bin
+				default-track: "3.0"
+				slices:
+					myslice:
+						contents:
+							/dir/file: {}
+			`,
+		},
+		selerror: `slice bin-mypkg_myslice refers to store "bin" with unknown kind "unknown"`,
+	}})
 }
 
 func runParseReleaseTests(c *C, tests []setupTest) {
