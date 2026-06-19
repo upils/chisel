@@ -20,14 +20,16 @@ import (
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/scripts"
 	"github.com/canonical/chisel/internal/setup"
+	"github.com/canonical/chisel/internal/store"
 	"github.com/canonical/chisel/internal/tarball"
 )
 
-const manifestMode fs.FileMode = 0644
+const manifestMode fs.FileMode = 0o644
 
 type RunOptions struct {
 	Selection *setup.Selection
 	Archives  map[string]archive.Archive
+	Stores    map[string]store.Store
 	TargetDir string
 }
 
@@ -90,7 +92,7 @@ func Run(options *RunOptions) error {
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
-	pkgFetchers, err := selectPkgFetchers(options.Archives, options.Selection)
+	pkgFetchers, err := selectPkgFetchers(options.Archives, options.Stores, options.Selection)
 	if err != nil {
 		return err
 	}
@@ -239,6 +241,12 @@ func Run(options *RunOptions) error {
 		if reader == nil {
 			continue
 		}
+		// src := pkgSources[slice.Package]
+		// Store packages are distributed as plain tarballs, whose extraction
+		// is not yet implemented. Fail until the format support is in place.
+		// if src.kind != sourceArchive {
+		// 	return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", src.pkg.RealName)
+		// }
 		err := tarball.Extract(reader, &tarball.ExtractOptions{
 			Package:   slice.Package,
 			Extract:   extract[slice.Package],
@@ -488,4 +496,78 @@ func createFile(targetDir, relPath string, pathInfo setup.PathInfo) (*fsutil.Ent
 		Link:        linkTarget,
 		MakeParents: true,
 	})
+}
+
+// resolvePkgSources determines the source for each package in the selection.
+// For archive packages it selects the highest priority archive containing the
+// package unless a particular archive is pinned within the slice definition
+// file. For store packages it records the opened store handle. It returns a map
+// of pkgSourceInfo indexed by package names.
+func resolvePkgSources(archives map[string]archive.Archive, stores map[string]store.Store, selection *setup.Selection) (map[string]pkgSource, error) {
+	sortedArchives := make([]*setup.Archive, 0, len(selection.Release.Archives))
+	for _, archive := range selection.Release.Archives {
+		if archive.Priority < 0 {
+			// Ignore negative priority archives unless a package specifically
+			// asks for it with the "archive" field.
+			continue
+		}
+		sortedArchives = append(sortedArchives, archive)
+	}
+	slices.SortFunc(sortedArchives, func(a, b *setup.Archive) int {
+		return b.Priority - a.Priority
+	})
+
+	pkgSources := make(map[string]pkgSource)
+	for _, s := range selection.Slices {
+		if _, ok := pkgSources[s.Package]; ok {
+			continue
+		}
+		pkg := selection.Release.Packages[s.Package]
+		if pkg.Store != "" {
+			storeHandle := stores[pkg.Store]
+			if storeHandle == nil {
+				return nil, fmt.Errorf("internal error: no store handle for store %q", pkg.Store)
+			}
+			// The store channel track is "<default-track>-<store version>",
+			// e.g. "3.1-26.10". The version pins the release series.
+			// Risk is left unspecified for now; the store applies its default.
+			// In the future the risk will optionnaly come from the CLI.
+			track := pkg.DefaultTrack + "-" + storeHandle.Options().Version
+			pkgSources[pkg.Name] = pkgSource{
+				arch: storeHandle.Options().Arch,
+				fetch: func() (io.ReadSeekCloser, *archive.PackageInfo, error) {
+					return storeHandle.Fetch(pkg.RealName, track, "")
+				},
+			}
+			continue
+		}
+
+		var candidates []*setup.Archive
+		if pkg.Archive == "" {
+			// If the package has not pinned any archive, choose the highest
+			// priority archive in which the package exists.
+			candidates = sortedArchives
+		} else {
+			candidates = []*setup.Archive{selection.Release.Archives[pkg.Archive]}
+		}
+
+		var chosen archive.Archive
+		for _, archiveInfo := range candidates {
+			archive := archives[archiveInfo.Name]
+			if archive != nil && archive.Exists(pkg.RealName) {
+				chosen = archive
+				break
+			}
+		}
+		if chosen == nil {
+			return nil, fmt.Errorf("cannot find package %q in archive(s)", pkg.RealName)
+		}
+		pkgSources[pkg.Name] = pkgSource{
+			arch: chosen.Options().Arch,
+			fetch: func() (io.ReadSeekCloser, *archive.PackageInfo, error) {
+				return chosen.Fetch(pkg.RealName)
+			},
+		}
+	}
+	return pkgSources, nil
 }

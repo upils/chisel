@@ -13,15 +13,6 @@ type TestArchive struct {
 	Packages map[string]*TestPackage
 }
 
-type TestPackage struct {
-	Name     string
-	Version  string
-	Hash     string
-	Arch     string
-	Data     []byte
-	Archives []string
-}
-
 func (a *TestArchive) Options() *archive.Options {
 	return &a.Opts
 }
