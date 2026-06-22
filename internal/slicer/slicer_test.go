@@ -18,6 +18,7 @@ import (
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
+	"github.com/canonical/chisel/internal/store"
 	"github.com/canonical/chisel/internal/testutil"
 	"github.com/canonical/chisel/public/manifest"
 )
@@ -1982,6 +1983,14 @@ var slicerTests = []slicerTest{{
 	summary: "Store package fails as it is not yet supported",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"bin-store-pkg", "myslice"}},
 	arch:    "amd64",
+	pkgs: []*testutil.TestPackage{{
+		Name: "test-package",
+		Data: testutil.PackageData["test-package"],
+	}, {
+		Name:  "store-pkg",
+		Store: "bin",
+		Data:  testutil.PackageData["test-package"],
+	}},
 	release: map[string]string{
 		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
 		"slices/mydir/test-package.yaml": `
@@ -2001,7 +2010,7 @@ var slicerTests = []slicerTest{{
 						/dir/store-file:
 		`,
 	},
-	error: `cannot fetch package "bin-store-pkg" from store: store packages are not yet supported`,
+	error: `cannot extract package "bin-store-pkg" from store: store packages are not yet supported`,
 }}
 
 func (s *S) TestRun(c *C) {
@@ -2109,6 +2118,9 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 			for name, setupArchive := range release.Archives {
 				pkgs := make(map[string]*testutil.TestPackage)
 				for _, pkg := range test.pkgs {
+					if pkg.Store != "" {
+						continue
+					}
 					if len(pkg.Archives) == 0 || slices.Contains(pkg.Archives, name) {
 						pkgs[pkg.Name] = pkg
 					}
@@ -2127,9 +2139,21 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 				archives[name] = archive
 			}
 
+			stores := map[string]store.Store{}
+			for name := range release.Stores {
+				pkgs := make(map[string]*testutil.TestPackage)
+				for _, pkg := range test.pkgs {
+					if pkg.Store == name {
+						pkgs[pkg.Name] = pkg
+					}
+				}
+				stores[name] = &testutil.TestStore{Packages: pkgs}
+			}
+
 			options := slicer.RunOptions{
 				Selection: selection,
 				Archives:  archives,
+				Stores:    stores,
 				TargetDir: c.MkDir(),
 			}
 			if test.hackopt != nil {

@@ -40,6 +40,10 @@ type storeKind string
 
 const storeKindBin storeKind = "bin"
 
+// defaultRisk is the channel risk used when a specific risk has not been
+// requested.
+const defaultRisk = "stable"
+
 type binStore struct {
 	options Options
 	cache   *cache.Cache
@@ -168,8 +172,12 @@ func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
 }
 
 // selectRevision finds the channel-map entry matching the requested track,
-// risk, and architecture, returning its revision.
+// risk, and architecture, returning its revision. An empty risk falls back to
+// defaultRisk.
 func selectRevision(info *binInfoResponse, arch, track, risk string) (*binRevision, error) {
+	if risk == "" {
+		risk = defaultRisk
+	}
 	for i := range info.ChannelMap {
 		entry := &info.ChannelMap[i]
 		if entry.Channel.Track != track || entry.Channel.Risk != risk {
