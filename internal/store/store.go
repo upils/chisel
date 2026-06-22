@@ -171,13 +171,17 @@ func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
 	return &info, nil
 }
 
-// selectRevision finds the channel-map entry matching the requested track,
-// risk, and architecture, returning its revision. An empty risk falls back to
-// defaultRisk.
-func selectRevision(info *binInfoResponse, arch, track, risk string) (*binRevision, error) {
+func resolveRisk(risk string) string {
 	if risk == "" {
-		risk = defaultRisk
+		return defaultRisk
 	}
+	return risk
+}
+
+// selectRevision finds the channel-map entry matching the requested track,
+// risk, and architecture, returning its revision. It fails if the matched
+// revision has no download digest.
+func selectRevision(info *binInfoResponse, arch, track, risk string) (*binRevision, error) {
 	for i := range info.ChannelMap {
 		entry := &info.ChannelMap[i]
 		if entry.Channel.Track != track || entry.Channel.Risk != risk {
@@ -185,6 +189,9 @@ func selectRevision(info *binInfoResponse, arch, track, risk string) (*binRevisi
 		}
 		if entry.Channel.Platform.Architecture != arch {
 			continue
+		}
+		if entry.Revision.Download.SHA3384 == "" {
+			return nil, fmt.Errorf("bin %q has no download digest", info.Name)
 		}
 		return &entry.Revision, nil
 	}
@@ -213,15 +220,17 @@ func validateDownloadURL(downloadURL string) error {
 	if u.Scheme != "https" {
 		return fmt.Errorf("bin download URL must use HTTPS: %q", downloadURL)
 	}
-	for _, host := range allowedDownloadHosts {
-		if u.Host == host || strings.HasSuffix(u.Host, "."+host) {
+	host := strings.ToLower(u.Hostname())
+	for _, allowed := range allowedDownloadHosts {
+		if host == allowed || strings.HasSuffix(host, "."+allowed) {
 			return nil
 		}
 	}
-	return fmt.Errorf("bin download URL has untrusted host %q", u.Host)
+	return fmt.Errorf("bin download URL has untrusted host %q", host)
 }
 
 func (s *binStore) Info(name, track, risk string) (*StorePackageInfo, error) {
+	risk = resolveRisk(risk)
 	resp, err := s.fetchBinInfo(name)
 	if err != nil {
 		return nil, err
@@ -244,6 +253,7 @@ func (s *binStore) Exists(name, track, risk string) bool {
 }
 
 func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error) {
+	risk = resolveRisk(risk)
 	logf("Fetching bin %s %s/%s ...", name, track, risk)
 
 	resp, err := s.fetchBinInfo(name)
@@ -255,6 +265,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		return nil, nil, err
 	}
 
+	digest := rev.Download.SHA3384
 	info := &StorePackageInfo{
 		Name:     name,
 		Version:  rev.Version,
@@ -263,7 +274,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 	}
 
 	// Check cache first.
-	reader, err := s.cache.Open(cache.SHA384, rev.Download.SHA3384)
+	reader, err := s.cache.Open(cache.SHA384, digest)
 	if err == nil {
 		logf("Using cached bin %s", name)
 		return reader, info, nil
@@ -291,7 +302,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		return nil, nil, fmt.Errorf("cannot download bin %q: %v", name, httpResp.Status)
 	}
 
-	writer := s.cache.Create(cache.SHA384, rev.Download.SHA3384)
+	writer := s.cache.Create(cache.SHA384, digest)
 	defer writer.Close()
 
 	_, err = io.Copy(writer, httpResp.Body)
@@ -302,7 +313,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		return nil, nil, fmt.Errorf("cannot fetch bin %q: %v", name, err)
 	}
 
-	reader, err = s.cache.Open(cache.SHA384, rev.Download.SHA3384)
+	reader, err = s.cache.Open(cache.SHA384, digest)
 	if err != nil {
 		return nil, nil, err
 	}
