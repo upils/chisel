@@ -50,7 +50,7 @@ type pkgSourceInfo struct {
 	arch    string
 	kind    sourceKind
 	archive archive.Archive
-	store   *setup.Store
+	// TODO: add store handle when store support is implemented.
 	pkg     *setup.Package
 }
 
@@ -539,10 +539,9 @@ func resolvePkgSources(archives map[string]archive.Archive, selection *setup.Sel
 		}
 		pkg := selection.Release.Packages[s.Package]
 		if pkg.Store != "" {
-			store := selection.Release.Stores[pkg.Store]
 			pkgSources[pkg.Name] = &pkgSourceInfo{
+				// TODO: Fill with the live store handle when store support is implemented.
 				kind:  sourceStore,
-				store: store,
 				pkg:   pkg,
 			}
 			continue
