@@ -152,7 +152,7 @@ var setupTests = []setupTest{{
 							"/file/path2":  {Kind: "copy", Info: "/other/path"},
 							"/file/path3":  {Kind: "symlink", Info: "/other/path"},
 							"/file/path4":  {Kind: "text", Info: "content", Until: "mutate"},
-							"/file/path5":  {Kind: "copy", Mode: 0o755, Mutable: true},
+							"/file/path5":  {Kind: "copy", Mode: 0755, Mutable: true},
 							"/file/path6/": {Kind: "dir"},
 						},
 					},
@@ -3934,27 +3934,7 @@ var setupTests = []setupTest{{
 }, {
 	summary: "Store package is parsed correctly",
 	input: map[string]string{
-		"chisel.yaml": `
-			format: v3
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 26.10
-					components: [main, universe]
-					suites: [stonking]
-					public-keys: [test-key]
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-			stores:
-				bin:
-					kind: bin
-					version: 26.10
-					default-prefix: "bin-"
-		`,
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
 		"slices/bin/mypkg.yaml": `
 			package: mypkg
 			store: bin
@@ -3966,8 +3946,8 @@ var setupTests = []setupTest{{
 		Archives: map[string]*setup.Archive{
 			"ubuntu": {
 				Name:       "ubuntu",
-				Version:    "26.10",
-				Suites:     []string{"stonking"},
+				Version:    "22.04",
+				Suites:     []string{"jammy"},
 				Components: []string{"main", "universe"},
 				PubKeys:    []*packet.PublicKey{testKey.PubKey},
 				Maintained: true,
@@ -4022,27 +4002,7 @@ var setupTests = []setupTest{{
 }, {
 	summary: "Store and archive are mutually exclusive",
 	input: map[string]string{
-		"chisel.yaml": `
-			format: v3
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 26.10
-					components: [main, universe]
-					suites: [stonking]
-					public-keys: [test-key]
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-			stores:
-				bin:
-					kind: bin
-					version: 26.10
-					default-prefix: "bin-"
-		`,
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
 		"slices/bin/mypkg.yaml": `
 			package: mypkg
 			archive: ubuntu
@@ -4054,27 +4014,7 @@ var setupTests = []setupTest{{
 }, {
 	summary: "Store package missing default-track (v3)",
 	input: map[string]string{
-		"chisel.yaml": `
-			format: v3
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 26.10
-					components: [main, universe]
-					suites: [stonking]
-					public-keys: [test-key]
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-			stores:
-				bin:
-					kind: bin
-					version: 26.10
-					default-prefix: "bin-"
-		`,
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
 		"slices/bin/mypkg.yaml": `
 			package: mypkg
 			store: bin
@@ -4084,27 +4024,7 @@ var setupTests = []setupTest{{
 }, {
 	summary: "default-track without store (v3)",
 	input: map[string]string{
-		"chisel.yaml": `
-			format: v3
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 26.10
-					components: [main, universe]
-					suites: [stonking]
-					public-keys: [test-key]
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-			stores:
-				bin:
-					kind: bin
-					version: 26.10
-					default-prefix: "bin-"
-		`,
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
 		"slices/bin/mypkg.yaml": `
 			package: mypkg
 			default-track: "3.0"
@@ -4114,27 +4034,7 @@ var setupTests = []setupTest{{
 }, {
 	summary: "default-track must not contain / (v3)",
 	input: map[string]string{
-		"chisel.yaml": `
-			format: v3
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 26.10
-					components: [main, universe]
-					suites: [stonking]
-					public-keys: [test-key]
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-			stores:
-				bin:
-					kind: bin
-					version: 26.10
-					default-prefix: "bin-"
-		`,
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
 		"slices/bin/mypkg.yaml": `
 			package: mypkg
 			store: bin
@@ -4145,27 +4045,7 @@ var setupTests = []setupTest{{
 }, {
 	summary: "Package store references undefined store (v3)",
 	input: map[string]string{
-		"chisel.yaml": `
-			format: v3
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 26.10
-					components: [main, universe]
-					suites: [stonking]
-					public-keys: [test-key]
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-			stores:
-				bin:
-					kind: bin
-					version: 26.10
-					default-prefix: "bin-"
-		`,
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
 		"slices/bin/mypkg.yaml": `
 			package: mypkg
 			store: non-existing
@@ -4251,27 +4131,7 @@ var setupTests = []setupTest{{
 }, {
 	summary: "Same-named package in archive and store",
 	input: map[string]string{
-		"chisel.yaml": `
-			format: v3
-			maintenance:
-				standard: 2025-01-01
-				end-of-life: 2100-01-01
-			archives:
-				ubuntu:
-					version: 26.10
-					components: [main, universe]
-					suites: [stonking]
-					public-keys: [test-key]
-			public-keys:
-				test-key:
-					id: ` + testKey.ID + `
-					armor: |` + "\n" + testutil.PrefixEachLine(testKey.PubKeyArmor, "\t\t\t\t\t\t") + `
-			stores:
-				bin:
-					kind: bin
-					version: 26.10
-					default-prefix: "bin-"
-		`,
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
 		"slices/curl.yaml": `
 			package: curl
 			slices:
@@ -4297,8 +4157,8 @@ var setupTests = []setupTest{{
 		Archives: map[string]*setup.Archive{
 			"ubuntu": {
 				Name:       "ubuntu",
-				Version:    "26.10",
-				Suites:     []string{"stonking"},
+				Version:    "22.04",
+				Suites:     []string{"jammy"},
 				Components: []string{"main", "universe"},
 				PubKeys:    []*packet.PublicKey{testKey.PubKey},
 				Maintained: true,
