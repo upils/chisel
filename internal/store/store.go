@@ -93,43 +93,53 @@ func Open(options *Options) (Store, error) {
 
 // binInfoResponse represents the JSON response from the bin store info endpoint.
 type binInfoResponse struct {
-	Name       string `json:"name"`
-	PackageID  string `json:"package-id"`
-	ChannelMap []struct {
-		Channel struct {
-			Name     string `json:"name"`
-			Risk     string `json:"risk"`
-			Track    string `json:"track"`
-			Platform struct {
-				Architecture string `json:"architecture"`
-			} `json:"platform"`
-		} `json:"channel"`
-		Revision struct {
-			Version  string `json:"version"`
-			Revision int    `json:"revision"`
-			Download struct {
-				URL     string `json:"url"`
-				SHA3384 string `json:"sha3-384"`
-				Size    int64  `json:"size"`
-			} `json:"download"`
-			Platforms []struct {
-				Architecture string `json:"architecture"`
-			} `json:"platforms"`
-		} `json:"revision"`
-	} `json:"channel-map"`
+	Name       string          `json:"name"`
+	PackageID  string          `json:"package-id"`
+	ChannelMap []binChannelMap `json:"channel-map"`
+}
+
+type binChannelMap struct {
+	Channel  binChannel  `json:"channel"`
+	Revision binRevision `json:"revision"`
+}
+
+type binChannel struct {
+	Name     string      `json:"name"`
+	Risk     string      `json:"risk"`
+	Track    string      `json:"track"`
+	Platform binPlatform `json:"platform"`
+}
+
+type binPlatform struct {
+	Architecture string `json:"architecture"`
+}
+
+type binRevision struct {
+	Version  string      `json:"version"`
+	Revision int         `json:"revision"`
+	Download binDownload `json:"download"`
+}
+
+type binDownload struct {
+	URL     string `json:"url"`
+	SHA3384 string `json:"sha3-384"`
+	Size    int64  `json:"size"`
 }
 
 func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
 	if !nameExp.MatchString(name) {
 		return nil, fmt.Errorf("invalid package name %q", name)
 	}
-	infoURL, err := url.JoinPath(s.apiURL, "info", name)
+	u, err := url.Parse(s.apiURL)
 	if err != nil {
-		return nil, fmt.Errorf("internal error: cannot construct bin store URL: %v", err)
+		return nil, fmt.Errorf("internal error: cannot parse bin store URL: %v", err)
 	}
-	infoURL += "?fields=download,version,revision,channel-map"
+	u = u.JoinPath("info", name)
+	u.RawQuery = url.Values{
+		"fields": {"download,version,revision,channel-map"},
+	}.Encode()
 
-	req, err := http.NewRequest("GET", infoURL, nil)
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create HTTP request: %v", err)
 	}
@@ -158,19 +168,19 @@ func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
 }
 
 // selectRevision finds the channel-map entry matching the requested track,
-// risk, and architecture.
-func selectRevision(info *binInfoResponse, arch, track, risk string) (downloadURL, sha3384, version string, revision int, err error) {
-	for _, entry := range info.ChannelMap {
+// risk, and architecture, returning its revision.
+func selectRevision(info *binInfoResponse, arch, track, risk string) (*binRevision, error) {
+	for i := range info.ChannelMap {
+		entry := &info.ChannelMap[i]
 		if entry.Channel.Track != track || entry.Channel.Risk != risk {
 			continue
 		}
 		if entry.Channel.Platform.Architecture != arch {
 			continue
 		}
-		return entry.Revision.Download.URL, entry.Revision.Download.SHA3384,
-			entry.Revision.Version, entry.Revision.Revision, nil
+		return &entry.Revision, nil
 	}
-	return "", "", "", 0, fmt.Errorf("bin %q has no %s/%s release for architecture %q", info.Name, track, risk, arch)
+	return nil, fmt.Errorf("bin %q has no %s/%s release for architecture %q", info.Name, track, risk, arch)
 }
 
 // nameExp matches a valid package name. It deliberately forbids "/" and any
@@ -208,15 +218,15 @@ func (s *binStore) Info(name, track, risk string) (*StorePackageInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, sha384, version, revision, err := selectRevision(resp, s.options.Arch, track, risk)
+	rev, err := selectRevision(resp, s.options.Arch, track, risk)
 	if err != nil {
 		return nil, err
 	}
 	return &StorePackageInfo{
 		Name:     name,
-		Version:  version,
-		Revision: revision,
-		SHA384:   sha384,
+		Version:  rev.Version,
+		Revision: rev.Revision,
+		SHA384:   rev.Download.SHA3384,
 	}, nil
 }
 
@@ -232,20 +242,20 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 	if err != nil {
 		return nil, nil, err
 	}
-	downloadURL, sha384, version, revision, err := selectRevision(resp, s.options.Arch, track, risk)
+	rev, err := selectRevision(resp, s.options.Arch, track, risk)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	info := &StorePackageInfo{
 		Name:     name,
-		Version:  version,
-		Revision: revision,
-		SHA384:   sha384,
+		Version:  rev.Version,
+		Revision: rev.Revision,
+		SHA384:   rev.Download.SHA3384,
 	}
 
 	// Check cache first.
-	reader, err := s.cache.Open(cache.SHA384, sha384)
+	reader, err := s.cache.Open(cache.SHA384, rev.Download.SHA3384)
 	if err == nil {
 		logf("Using cached bin %s", name)
 		return reader, info, nil
@@ -254,11 +264,11 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 	}
 
 	// Download the bin.
-	err = validateDownloadURL(downloadURL)
+	err = validateDownloadURL(rev.Download.URL)
 	if err != nil {
 		return nil, nil, err
 	}
-	req, err := http.NewRequest("GET", downloadURL, nil)
+	req, err := http.NewRequest("GET", rev.Download.URL, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot create HTTP request: %v", err)
 	}
@@ -273,7 +283,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		return nil, nil, fmt.Errorf("cannot download bin %q: %v", name, httpResp.Status)
 	}
 
-	writer := s.cache.Create(cache.SHA384, sha384)
+	writer := s.cache.Create(cache.SHA384, rev.Download.SHA3384)
 	defer writer.Close()
 
 	_, err = io.Copy(writer, httpResp.Body)
@@ -284,7 +294,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		return nil, nil, fmt.Errorf("cannot fetch bin %q: %v", name, err)
 	}
 
-	reader, err = s.cache.Open(cache.SHA384, sha384)
+	reader, err = s.cache.Open(cache.SHA384, rev.Download.SHA3384)
 	if err != nil {
 		return nil, nil, err
 	}
