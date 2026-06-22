@@ -52,8 +52,8 @@ type pkgSourceInfo struct {
 	arch    string
 	kind    sourceKind
 	archive archive.Archive
-	// TODO: add store handle when store support is implemented.
-	pkg *setup.Package
+	store   store.Store
+	pkg     *setup.Package
 }
 
 type contentChecker struct {
@@ -109,7 +109,7 @@ func Run(options *RunOptions) error {
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
-	pkgSources, err := resolvePkgSources(options.Archives, options.Selection)
+	pkgSources, err := resolvePkgSources(options.Archives, options.Stores, options.Selection)
 	if err != nil {
 		return err
 	}
@@ -172,19 +172,25 @@ func Run(options *RunOptions) error {
 			continue
 		}
 		src := pkgSources[slice.Package]
-		// Store packages are distributed as "ar" archives, whose extraction is
-		// not yet implemented. Fail until store handling and the "ar" format
-		// support are in place.
+		var reader io.ReadSeekCloser
 		if src.kind == sourceStore {
-			return fmt.Errorf("cannot fetch package %q from store: store packages are not yet supported", src.pkg.Name)
-		}
-		reader, info, err := src.archive.Fetch(src.pkg.RealName)
-		if err != nil {
-			return err
+			// The package metadata returned by the store is not yet recorded
+			// in the manifest; this is handled in a subsequent change.
+			// Risk is left unspecified for now; the store applies its default.
+			reader, _, err = src.store.Fetch(src.pkg.RealName, src.pkg.DefaultTrack, "")
+			if err != nil {
+				return err
+			}
+		} else {
+			var info *archive.PackageInfo
+			reader, info, err = src.archive.Fetch(src.pkg.RealName)
+			if err != nil {
+				return err
+			}
+			pkgInfos = append(pkgInfos, info)
 		}
 		defer reader.Close()
 		packages[slice.Package] = reader
-		pkgInfos = append(pkgInfos, info)
 	}
 
 	// When creating content, record if a path is known and whether they are
@@ -263,6 +269,12 @@ func Run(options *RunOptions) error {
 		reader := packages[slice.Package]
 		if reader == nil {
 			continue
+		}
+		src := pkgSources[slice.Package]
+		// Store packages are distributed as plain tarballs, whose extraction
+		// is not yet implemented. Fail until the format support is in place.
+		if src.kind == sourceStore {
+			return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", src.pkg.Name)
 		}
 		err := deb.Extract(reader, &deb.ExtractOptions{
 			Package:   slice.Package,
@@ -518,9 +530,9 @@ func createFile(targetDir, relPath string, pathInfo setup.PathInfo) (*fsutil.Ent
 // resolvePkgSources determines the source for each package in the selection.
 // For archive packages it selects the highest priority archive containing the
 // package unless a particular archive is pinned within the slice definition
-// file. For store packages it records the store reference. It returns a map
+// file. For store packages it records the opened store handle. It returns a map
 // of pkgSourceInfo indexed by package names.
-func resolvePkgSources(archives map[string]archive.Archive, selection *setup.Selection) (map[string]*pkgSourceInfo, error) {
+func resolvePkgSources(archives map[string]archive.Archive, stores map[string]store.Store, selection *setup.Selection) (map[string]*pkgSourceInfo, error) {
 	sortedArchives := make([]*setup.Archive, 0, len(selection.Release.Archives))
 	for _, archive := range selection.Release.Archives {
 		if archive.Priority < 0 {
@@ -542,9 +554,9 @@ func resolvePkgSources(archives map[string]archive.Archive, selection *setup.Sel
 		pkg := selection.Release.Packages[s.Package]
 		if pkg.Store != "" {
 			pkgSources[pkg.Name] = &pkgSourceInfo{
-				// TODO: Fill with the live store handle when store support is implemented.
-				kind: sourceStore,
-				pkg:  pkg,
+				kind:  sourceStore,
+				store: stores[pkg.Store],
+				pkg:   pkg,
 			}
 			continue
 		}
