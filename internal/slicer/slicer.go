@@ -553,9 +553,13 @@ func resolvePkgSources(archives map[string]archive.Archive, stores map[string]st
 		}
 		pkg := selection.Release.Packages[s.Package]
 		if pkg.Store != "" {
+			storeHandle := stores[pkg.Store]
+			if storeHandle == nil {
+				return nil, fmt.Errorf("internal error: no store handle for store %q", pkg.Store)
+			}
 			pkgSources[pkg.Name] = &pkgSourceInfo{
 				kind:  sourceStore,
-				store: stores[pkg.Store],
+				store: storeHandle,
 				pkg:   pkg,
 			}
 			continue

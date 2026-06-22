@@ -112,12 +112,18 @@ func (s *storeSuite) TestValidateDownloadURL(c *C) {
 		{"https://api.snapcraft.io/v2/bins/foo", ""},
 		{"https://api.staging.snapcraft.io/v2/bins/foo", ""},
 		{"https://sub.storage.snapcraftcontent.com/bins/foo.tar.xz", ""},
+		{"https://storage.snapcraftcontent.com:443/bins/foo.tar.xz", ""},
+		{"https://Storage.SnapcraftContent.Com/bins/foo.tar.xz", ""},
 		{
 			"http://storage.snapcraftcontent.com/bins/foo.tar.xz",
 			`bin download URL must use HTTPS: "http://storage.snapcraftcontent.com/bins/foo.tar.xz"`,
 		},
 		{
 			"https://evil.example.com/bins/foo.tar.xz",
+			`bin download URL has untrusted host "evil.example.com"`,
+		},
+		{
+			"https://Evil.Example.Com/bins/foo.tar.xz",
 			`bin download URL has untrusted host "evil.example.com"`,
 		},
 		{
@@ -211,6 +217,11 @@ var infoTests = []infoTest{{
 		]
 	}`,
 	info: &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "amd64hash"},
+}, {
+	summary: "Missing download digest",
+	status:  200,
+	body:    string(makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")),
+	error:   `bin "curl" has no download digest`,
 }}
 
 func (s *storeSuite) TestInfo(c *C) {
@@ -405,6 +416,28 @@ func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 
 	_, _, err = src.Fetch("curl", "latest", "stable")
 	c.Assert(err, ErrorMatches, `bin download URL must use HTTPS: "http://evil.example.com/bins/curl.tar.xz"`)
+}
+
+func (s *storeSuite) TestFetchMissingDigest(c *C) {
+	// The store omits the sha3-384 digest from the response.
+	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")
+
+	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(bytes.NewReader(infoBody)),
+		}, nil
+	}
+
+	src, err := store.Open(&store.Options{
+		Arch:     "amd64",
+		CacheDir: s.cacheDir,
+		Kind:     "bin",
+	})
+	c.Assert(err, IsNil)
+
+	_, _, err = src.Fetch("curl", "latest", "stable")
+	c.Assert(err, ErrorMatches, `bin "curl" has no download digest`)
 }
 
 func (s *storeSuite) TestStagingEnvVar(c *C) {
