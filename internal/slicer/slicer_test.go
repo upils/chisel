@@ -1979,7 +1979,7 @@ var slicerTests = []slicerTest{{
 		"/dir/file": "file 0644 cc55e2ec {test-package_third}",
 	},
 }, {
-	summary: "Store package is skipped when fetching is not implemented",
+	summary: "Store package fails as it is not yet supported",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"bin-store-pkg", "myslice"}},
 	arch:    "amd64",
 	release: map[string]string{
@@ -2001,13 +2001,7 @@ var slicerTests = []slicerTest{{
 						/dir/store-file:
 		`,
 	},
-	filesystem: map[string]string{
-		"/dir/":     "dir 0755",
-		"/dir/file": "file 0644 cc55e2ec",
-	},
-	manifestPaths: map[string]string{
-		"/dir/file": "file 0644 cc55e2ec {test-package_myslice}",
-	},
+	error: `cannot fetch package "bin-store-pkg" from store: store packages are not yet supported`,
 }}
 
 func (s *S) TestRun(c *C) {

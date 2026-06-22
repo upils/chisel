@@ -112,27 +112,14 @@ func Run(options *RunOptions) error {
 		return err
 	}
 
-	// Store package processing is not yet implemented, so store slices
-	// are filtered out from the selection for now.
-	var archiveSlices []*setup.Slice
-	for _, slice := range options.Selection.Slices {
-		if pkgSources[slice.Package].kind != sourceStore {
-			archiveSlices = append(archiveSlices, slice)
-		}
-	}
-	selection := &setup.Selection{
-		Release: options.Selection.Release,
-		Slices:  archiveSlices,
-	}
-
-	prefers, err := selection.Prefers()
+	prefers, err := options.Selection.Prefers()
 	if err != nil {
 		return err
 	}
 
 	// Build information to process the selection.
 	extract := make(map[string]map[string][]deb.ExtractInfo)
-	for _, slice := range selection.Slices {
+	for _, slice := range options.Selection.Slices {
 		extractPackage := extract[slice.Package]
 		if extractPackage == nil {
 			extractPackage = make(map[string][]deb.ExtractInfo)
@@ -178,11 +165,17 @@ func Run(options *RunOptions) error {
 	// Fetch all packages, using the selection order.
 	packages := make(map[string]io.ReadSeekCloser)
 	var pkgInfos []*archive.PackageInfo
-	for _, slice := range selection.Slices {
+	for _, slice := range options.Selection.Slices {
 		if packages[slice.Package] != nil {
 			continue
 		}
 		src := pkgSources[slice.Package]
+		// Store packages are distributed as "ar" archives, whose extraction is
+		// not yet implemented. Fail until store handling and the "ar" format
+		// support are in place.
+		if src.kind == sourceStore {
+			return fmt.Errorf("cannot fetch package %q from store: store packages are not yet supported", src.pkg.Name)
+		}
 		reader, info, err := src.archive.Fetch(src.pkg.RealName)
 		if err != nil {
 			return err
@@ -264,7 +257,7 @@ func Run(options *RunOptions) error {
 	}
 
 	// Extract all packages, also using the selection order.
-	for _, slice := range selection.Slices {
+	for _, slice := range options.Selection.Slices {
 		reader := packages[slice.Package]
 		if reader == nil {
 			continue
@@ -299,7 +292,7 @@ func Run(options *RunOptions) error {
 	// First group them by their relative path. Then create them and attribute
 	// them to the appropriate slices.
 	relPaths := map[string][]*setup.Slice{}
-	for _, slice := range selection.Slices {
+	for _, slice := range options.Selection.Slices {
 		src := pkgSources[slice.Package]
 		for relPath, pathInfo := range slice.Contents {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, src.arch) {
@@ -359,7 +352,7 @@ func Run(options *RunOptions) error {
 		CheckRead:  checker.checkKnown,
 		OnWrite:    report.Mutate,
 	}
-	for _, slice := range selection.Slices {
+	for _, slice := range options.Selection.Slices {
 		opts := scripts.RunOptions{
 			Label:  "mutate",
 			Script: slice.Scripts.Mutate,
@@ -378,7 +371,7 @@ func Run(options *RunOptions) error {
 		return err
 	}
 
-	return generateManifests(targetDir, selection, report, pkgInfos)
+	return generateManifests(targetDir, options.Selection, report, pkgInfos)
 }
 
 func generateManifests(targetDir string, selection *setup.Selection,
