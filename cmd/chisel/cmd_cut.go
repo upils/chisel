@@ -133,7 +133,6 @@ func (cmd *cmdCut) Execute(args []string) error {
 			return err
 		}
 		stores[storeInfo.Name] = openStore
-		break
 	}
 
 	err = slicer.Run(&slicer.RunOptions{
