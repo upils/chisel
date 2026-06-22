@@ -4,7 +4,7 @@ import "net/http"
 
 var (
 	ValidateDownloadURL = validateDownloadURL
-	StagingEnvVar       = stagingEnvVar
+	BinStagingEnvVar    = binStagingEnvVar
 )
 
 func SetHTTPDo(fn func(req *http.Request) (*http.Response, error)) (restore func()) {

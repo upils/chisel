@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -46,9 +47,9 @@ type binStore struct {
 }
 
 const (
-	binAPIBase    = "https://api.snapcraft.io/v2/bins"
-	binAPIStaging = "https://api.staging.snapcraft.io/v2/bins"
-	stagingEnvVar = "CHISEL_BIN_STAGING"
+	binAPIBase       = "https://api.snapcraft.io/v2/bins"
+	binAPIStaging    = "https://api.staging.snapcraft.io/v2/bins"
+	binStagingEnvVar = "CHISEL_BIN_STAGING"
 )
 
 var httpClient = &http.Client{
@@ -77,7 +78,7 @@ func Open(options *Options) (Store, error) {
 	switch storeKind(options.Kind) {
 	case storeKindBin:
 		apiURL := binAPIBase
-		if os.Getenv(stagingEnvVar) != "" {
+		if os.Getenv(binStagingEnvVar) != "" {
 			apiURL = binAPIStaging
 		}
 		return &binStore{
@@ -90,7 +91,7 @@ func Open(options *Options) (Store, error) {
 	}
 }
 
-// binInfoResponse represents the JSON response from the bins info endpoint.
+// binInfoResponse represents the JSON response from the bin store info endpoint.
 type binInfoResponse struct {
 	Name       string `json:"name"`
 	PackageID  string `json:"package-id"`
@@ -119,9 +120,12 @@ type binInfoResponse struct {
 }
 
 func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
+	if !nameExp.MatchString(name) {
+		return nil, fmt.Errorf("invalid package name %q", name)
+	}
 	infoURL, err := url.JoinPath(s.apiURL, "info", name)
 	if err != nil {
-		return nil, fmt.Errorf("internal error: cannot construct bins API URL: %v", err)
+		return nil, fmt.Errorf("internal error: cannot construct bin store URL: %v", err)
 	}
 	infoURL += "?fields=download,version,revision,channel-map"
 
@@ -132,7 +136,7 @@ func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
 
 	resp, err := httpDo(req)
 	if err != nil {
-		return nil, fmt.Errorf("cannot talk to bins API: %v", err)
+		return nil, fmt.Errorf("cannot talk to bin store: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -142,13 +146,13 @@ func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
 	case 404:
 		return nil, fmt.Errorf("bin %q not found", name)
 	default:
-		return nil, fmt.Errorf("cannot fetch from bins API: %v", resp.Status)
+		return nil, fmt.Errorf("cannot fetch from bin store: %v", resp.Status)
 	}
 
 	var info binInfoResponse
 	err = json.NewDecoder(resp.Body).Decode(&info)
 	if err != nil {
-		return nil, fmt.Errorf("cannot decode bins API response: %v", err)
+		return nil, fmt.Errorf("cannot decode bin store response: %v", err)
 	}
 	return &info, nil
 }
@@ -168,6 +172,11 @@ func selectRevision(info *binInfoResponse, arch, track, risk string) (downloadUR
 	}
 	return "", "", "", 0, fmt.Errorf("bin %q has no %s/%s release for architecture %q", info.Name, track, risk, arch)
 }
+
+// nameExp matches a valid package name. It deliberately forbids "/" and any
+// leading "." so that a name cannot be used to traverse or otherwise alter the
+// store API URL path when interpolated into it.
+var nameExp = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
 
 // allowedDownloadHosts lists the hosts from which bin downloads are permitted.
 var allowedDownloadHosts = []string{

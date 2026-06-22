@@ -2,7 +2,6 @@ package store_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/store"
-	"github.com/canonical/chisel/internal/testutil"
 )
 
 type storeSuite struct {
@@ -54,17 +52,17 @@ func (s *storeSuite) doRequest(req *http.Request) (*http.Response, error) {
 }
 
 func fakeEnv(staging string) func() {
-	oldStaging := os.Getenv(store.StagingEnvVar)
+	oldStaging := os.Getenv(store.BinStagingEnvVar)
 	if staging != "" {
-		os.Setenv(store.StagingEnvVar, staging)
+		os.Setenv(store.BinStagingEnvVar, staging)
 	} else {
-		os.Unsetenv(store.StagingEnvVar)
+		os.Unsetenv(store.BinStagingEnvVar)
 	}
 	return func() {
 		if oldStaging != "" {
-			os.Setenv(store.StagingEnvVar, oldStaging)
+			os.Setenv(store.BinStagingEnvVar, oldStaging)
 		} else {
-			os.Unsetenv(store.StagingEnvVar)
+			os.Unsetenv(store.BinStagingEnvVar)
 		}
 	}
 }
@@ -75,121 +73,181 @@ func sha384Hash(data []byte) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func makeBinInfoResponse(name, track, risk, arch, version string, revision int, sha384 string) *binInfoResponseJSON {
-	return &binInfoResponseJSON{
-		Name: name,
-		ChannelMap: []binChannelMapJSON{
+func makeBinInfoBody(name, track, risk, arch, version string, revision int, sha384 string) []byte {
+	downloadURL := "https://storage.snapcraftcontent.com/bins/" + name + ".tar.xz"
+	return makeBinInfoBodyWithURL(name, track, risk, arch, version, revision, sha384, downloadURL)
+}
+
+func makeBinInfoBodyWithURL(name, track, risk, arch, version string, revision int, sha384, downloadURL string) []byte {
+	return []byte(fmt.Sprintf(`{
+		"name": %q,
+		"channel-map": [
 			{
-				Channel: binChannelJSON{
-					Name:  track + "/" + risk,
-					Risk:  risk,
-					Track: track,
-					Platform: binPlatformJSON{
-						Architecture: arch,
-					},
+				"channel": {
+					"name": %q,
+					"risk": %q,
+					"track": %q,
+					"platform": {"architecture": %q}
 				},
-				Revision: binRevisionJSON{
-					Version:  version,
-					Revision: revision,
-					Download: binDownloadJSON{
-						URL:    "https://storage.snapcraftcontent.com/bins/" + name + ".tar.xz",
-						SHA384: sha384,
-						Size:   1024,
-					},
-				},
-			},
-		},
-	}
-}
-
-// JSON structures matching the internal binInfoResponse for test construction.
-type binInfoResponseJSON struct {
-	Name       string              `json:"name"`
-	ChannelMap []binChannelMapJSON `json:"channel-map"`
-}
-
-type binChannelMapJSON struct {
-	Channel  binChannelJSON  `json:"channel"`
-	Revision binRevisionJSON `json:"revision"`
-}
-
-type binChannelJSON struct {
-	Name     string          `json:"name"`
-	Risk     string          `json:"risk"`
-	Track    string          `json:"track"`
-	Platform binPlatformJSON `json:"platform"`
-}
-
-type binPlatformJSON struct {
-	Architecture string `json:"architecture"`
-}
-
-type binRevisionJSON struct {
-	Version  string          `json:"version"`
-	Revision int             `json:"revision"`
-	Download binDownloadJSON `json:"download"`
-}
-
-type binDownloadJSON struct {
-	URL    string `json:"url"`
-	SHA384 string `json:"sha3-384"`
-	Size   int64  `json:"size"`
+				"revision": {
+					"version": %q,
+					"revision": %d,
+					"download": {
+						"url": %q,
+						"sha3-384": %q,
+						"size": 1024
+					}
+				}
+			}
+		]
+	}`, name, track+"/"+risk, risk, track, arch, version, revision, downloadURL, sha384))
 }
 
 func (s *storeSuite) TestValidateDownloadURL(c *C) {
 	tests := []struct {
-		url    string
-		errStr string
+		url   string
+		error string
 	}{
 		{"https://storage.snapcraftcontent.com/bins/foo.tar.xz", ""},
 		{"https://api.snapcraft.io/v2/bins/foo", ""},
 		{"https://api.staging.snapcraft.io/v2/bins/foo", ""},
 		{"https://sub.storage.snapcraftcontent.com/bins/foo.tar.xz", ""},
-		{"http://storage.snapcraftcontent.com/bins/foo.tar.xz", "must use HTTPS"},
-		{"https://evil.example.com/bins/foo.tar.xz", "untrusted host"},
-		{"https://storage.snapcraftcontent.com.evil.com/bins/foo.tar.xz", "untrusted host"},
-		{"://invalid-url", "cannot parse"},
+		{
+			"http://storage.snapcraftcontent.com/bins/foo.tar.xz",
+			`bin download URL must use HTTPS: "http://storage.snapcraftcontent.com/bins/foo.tar.xz"`,
+		},
+		{
+			"https://evil.example.com/bins/foo.tar.xz",
+			`bin download URL has untrusted host "evil.example.com"`,
+		},
+		{
+			"https://storage.snapcraftcontent.com.evil.com/bins/foo.tar.xz",
+			`bin download URL has untrusted host "storage.snapcraftcontent.com.evil.com"`,
+		},
+		{"://invalid-url", `cannot parse bin download URL: .*`},
 	}
 	for _, test := range tests {
 		err := store.ValidateDownloadURL(test.url)
-		if test.errStr == "" {
+		if test.error == "" {
 			c.Assert(err, IsNil)
 		} else {
-			c.Assert(err, NotNil)
-			c.Assert(err.Error(), testutil.Contains, test.errStr)
+			c.Assert(err, ErrorMatches, test.error)
 		}
 	}
 }
 
 func (s *storeSuite) TestOpenArchValidation(c *C) {
 	tests := []struct {
-		arch   string
-		errStr string
+		arch  string
+		error string
 	}{
 		{"amd64", ""},
 		{"arm64", ""},
-		{"invalid", "invalid package architecture"},
+		{"invalid", "invalid package architecture: invalid"},
 	}
 	for _, test := range tests {
 		_, err := store.Open(&store.Options{
 			Arch:     test.arch,
 			CacheDir: s.cacheDir,
+			Kind:     "bin",
 		})
-		if test.errStr == "" {
+		if test.error == "" {
 			c.Assert(err, IsNil)
 		} else {
-			c.Assert(err, NotNil)
-			c.Assert(err.Error(), testutil.Contains, test.errStr)
+			c.Assert(err, ErrorMatches, test.error)
 		}
 	}
 }
 
-func (s *storeSuite) TestInfoSuccess(c *C) {
-	infoResp := makeBinInfoResponse("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
-	infoBody, _ := json.Marshal(infoResp)
+type infoTest struct {
+	summary    string
+	status     int
+	statusText string
+	body       string
+	info       *store.StorePackageInfo
+	error      string
+}
+
+var infoTests = []infoTest{{
+	summary: "Successful info",
+	status:  200,
+	body:    string(makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")),
+	info:    &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "abc123"},
+}, {
+	summary: "Package not found",
+	status:  404,
+	body:    "not found",
+	error:   `bin "curl" not found`,
+}, {
+	summary: "No release for the requested architecture",
+	status:  200,
+	body:    string(makeBinInfoBody("curl", "latest", "stable", "arm64", "8.5.0", 42, "abc123")),
+	error:   `bin "curl" has no latest/stable release for architecture "amd64"`,
+}, {
+	summary:    "Server error",
+	status:     500,
+	statusText: "500 Internal Server Error",
+	body:       "boom",
+	error:      "cannot fetch from bin store: 500 Internal Server Error",
+}, {
+	summary: "Malformed response body",
+	status:  200,
+	body:    "not json",
+	error:   "cannot decode bin store response: .*",
+}, {
+	summary: "Selects the entry matching the requested architecture",
+	status:  200,
+	body: `{
+		"name": "curl",
+		"channel-map": [
+			{
+				"channel": {"name": "latest/stable", "risk": "stable", "track": "latest", "platform": {"architecture": "arm64"}},
+				"revision": {"version": "8.0.0", "revision": 1, "download": {"url": "https://storage.snapcraftcontent.com/bins/curl.tar.xz", "sha3-384": "arm64hash", "size": 1024}}
+			},
+			{
+				"channel": {"name": "latest/stable", "risk": "stable", "track": "latest", "platform": {"architecture": "amd64"}},
+				"revision": {"version": "8.5.0", "revision": 42, "download": {"url": "https://storage.snapcraftcontent.com/bins/curl.tar.xz", "sha3-384": "amd64hash", "size": 1024}}
+			}
+		]
+	}`,
+	info: &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "amd64hash"},
+}}
+
+func (s *storeSuite) TestInfo(c *C) {
+	for _, test := range infoTests {
+		c.Logf("Summary: %s", test.summary)
+
+		s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: test.status,
+				Status:     test.statusText,
+				Body:       io.NopCloser(strings.NewReader(test.body)),
+			}, nil
+		}
+
+		src, err := store.Open(&store.Options{
+			Arch:     "amd64",
+			CacheDir: s.cacheDir,
+			Kind:     "bin",
+		})
+		c.Assert(err, IsNil)
+
+		info, err := src.Info("curl", "latest", "stable")
+		if test.error != "" {
+			c.Assert(err, ErrorMatches, test.error)
+			continue
+		}
+		c.Assert(err, IsNil)
+		c.Assert(info, DeepEquals, test.info)
+	}
+}
+
+func (s *storeSuite) TestInfoRequest(c *C) {
+	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		c.Assert(req.URL.Path, Equals, "/v2/bins/info/curl")
+		c.Assert(req.URL.Query().Get("fields"), Equals, "download,version,revision,channel-map")
 		return &http.Response{
 			StatusCode: 200,
 			Body:       io.NopCloser(bytes.NewReader(infoBody)),
@@ -199,62 +257,16 @@ func (s *storeSuite) TestInfoSuccess(c *C) {
 	src, err := store.Open(&store.Options{
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
+		Kind:     "bin",
 	})
 	c.Assert(err, IsNil)
 
-	info, err := src.Info("curl", "latest", "stable")
-	c.Assert(err, IsNil)
-	c.Assert(info.Name, Equals, "curl")
-	c.Assert(info.Version, Equals, "8.5.0")
-	c.Assert(info.Revision, Equals, 42)
-	c.Assert(info.SHA384, Equals, "abc123")
-}
-
-func (s *storeSuite) TestInfoNotFound(c *C) {
-	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 404,
-			Body:       io.NopCloser(strings.NewReader("not found")),
-		}, nil
-	}
-
-	src, err := store.Open(&store.Options{
-		Arch:     "amd64",
-		CacheDir: s.cacheDir,
-	})
-	c.Assert(err, IsNil)
-
-	_, err = src.Info("nonexistent", "latest", "stable")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), testutil.Contains, "not found")
-}
-
-func (s *storeSuite) TestInfoNoMatchingChannel(c *C) {
-	infoResp := makeBinInfoResponse("curl", "latest", "stable", "arm64", "8.5.0", 42, "abc123")
-	infoBody, _ := json.Marshal(infoResp)
-
-	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 200,
-			Body:       io.NopCloser(bytes.NewReader(infoBody)),
-		}, nil
-	}
-
-	src, err := store.Open(&store.Options{
-		Arch:     "amd64",
-		CacheDir: s.cacheDir,
-	})
-	c.Assert(err, IsNil)
-
-	// The response only has arm64, but we're asking for amd64.
 	_, err = src.Info("curl", "latest", "stable")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), testutil.Contains, "has no")
+	c.Assert(err, IsNil)
 }
 
 func (s *storeSuite) TestExists(c *C) {
-	infoResp := makeBinInfoResponse("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
-	infoBody, _ := json.Marshal(infoResp)
+	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		if strings.Contains(req.URL.Path, "/info/curl") {
@@ -272,6 +284,7 @@ func (s *storeSuite) TestExists(c *C) {
 	src, err := store.Open(&store.Options{
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
+		Kind:     "bin",
 	})
 	c.Assert(err, IsNil)
 
@@ -283,8 +296,7 @@ func (s *storeSuite) TestFetchCacheMiss(c *C) {
 	tarData := []byte("fake tar.xz content")
 	digest := sha384Hash(tarData)
 
-	infoResp := makeBinInfoResponse("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
-	infoBody, _ := json.Marshal(infoResp)
+	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
 
 	callCount := 0
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
@@ -305,6 +317,7 @@ func (s *storeSuite) TestFetchCacheMiss(c *C) {
 	src, err := store.Open(&store.Options{
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
+		Kind:     "bin",
 	})
 	c.Assert(err, IsNil)
 
@@ -337,8 +350,7 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 	err := cc.Write(cache.SHA384, digest, tarData)
 	c.Assert(err, IsNil)
 
-	infoResp := makeBinInfoResponse("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
-	infoBody, _ := json.Marshal(infoResp)
+	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
 
 	infoCallCount := 0
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
@@ -355,6 +367,7 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 	src, err := store.Open(&store.Options{
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
+		Kind:     "bin",
 	})
 	c.Assert(err, IsNil)
 
@@ -372,10 +385,9 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 }
 
 func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
-	infoResp := makeBinInfoResponse("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
 	// Override the download URL to an invalid one.
-	infoResp.ChannelMap[0].Revision.Download.URL = "http://evil.example.com/bins/curl.tar.xz"
-	infoBody, _ := json.Marshal(infoResp)
+	infoBody := makeBinInfoBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123",
+		"http://evil.example.com/bins/curl.tar.xz")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -387,12 +399,12 @@ func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 	src, err := store.Open(&store.Options{
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
+		Kind:     "bin",
 	})
 	c.Assert(err, IsNil)
 
 	_, _, err = src.Fetch("curl", "latest", "stable")
-	c.Assert(err, NotNil)
-	c.Assert(err.Error(), testutil.Contains, "must use HTTPS")
+	c.Assert(err, ErrorMatches, `bin download URL must use HTTPS: "http://evil.example.com/bins/curl.tar.xz"`)
 }
 
 func (s *storeSuite) TestStagingEnvVar(c *C) {
@@ -402,11 +414,11 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 	src, err := store.Open(&store.Options{
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
+		Kind:     "bin",
 	})
 	c.Assert(err, IsNil)
 
-	infoResp := makeBinInfoResponse("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
-	infoBody, _ := json.Marshal(infoResp)
+	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		// Verify staging URL is used.
@@ -419,4 +431,41 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 
 	_, err = src.Info("curl", "latest", "stable")
 	c.Assert(err, IsNil)
+}
+
+func (s *storeSuite) TestOpenUnsupportedKind(c *C) {
+	_, err := store.Open(&store.Options{
+		Arch:     "amd64",
+		CacheDir: s.cacheDir,
+		Kind:     "snap",
+	})
+	c.Assert(err, ErrorMatches, `unsupported store kind "snap"`)
+}
+
+func (s *storeSuite) TestFetchDownloadError(c *C) {
+	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+
+	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
+		if strings.Contains(req.URL.Path, "/info/") {
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewReader(infoBody)),
+			}, nil
+		}
+		return &http.Response{
+			StatusCode: 500,
+			Status:     "500 Internal Server Error",
+			Body:       io.NopCloser(strings.NewReader("boom")),
+		}, nil
+	}
+
+	src, err := store.Open(&store.Options{
+		Arch:     "amd64",
+		CacheDir: s.cacheDir,
+		Kind:     "bin",
+	})
+	c.Assert(err, IsNil)
+
+	_, _, err = src.Fetch("curl", "latest", "stable")
+	c.Assert(err, ErrorMatches, `cannot download bin "curl": 500 Internal Server Error`)
 }
