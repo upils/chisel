@@ -177,7 +177,8 @@ func Run(options *RunOptions) error {
 			// The package metadata returned by the store is not yet recorded
 			// in the manifest; this is handled in a subsequent change.
 			// Risk is left unspecified for now; the store applies its default.
-			reader, _, err = src.store.Fetch(src.pkg.RealName, src.pkg.DefaultTrack, "")
+			track := src.pkg.DefaultTrack + "-" + src.store.Options().Version
+			reader, _, err = src.store.Fetch(src.pkg.RealName, track, "")
 			if err != nil {
 				return err
 			}

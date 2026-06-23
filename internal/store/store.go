@@ -17,6 +17,7 @@ import (
 
 // Store provides access to packages from the Snapcraft store API.
 type Store interface {
+	Options() *Options
 	Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error)
 	Exists(name, track, risk string) bool
 	Info(name, track, risk string) (*StorePackageInfo, error)
@@ -34,6 +35,7 @@ type Options struct {
 	Arch     string
 	CacheDir string
 	Kind     string
+	Version  string
 }
 
 type storeKind string
@@ -227,6 +229,10 @@ func validateDownloadURL(downloadURL string) error {
 		}
 	}
 	return fmt.Errorf("bin download URL has untrusted host %q", host)
+}
+
+func (s *binStore) Options() *Options {
+	return &s.options
 }
 
 func (s *binStore) Info(name, track, risk string) (*StorePackageInfo, error) {

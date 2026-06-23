@@ -128,6 +128,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 			Arch:     cmd.Arch,
 			CacheDir: cache.DefaultDir("chisel"),
 			Kind:     storeInfo.Kind,
+			Version:  storeInfo.Version,
 		})
 		if err != nil {
 			return err
