@@ -9,7 +9,12 @@ import (
 )
 
 type TestStore struct {
+	Opts     store.Options
 	Packages map[string]*TestPackage
+}
+
+func (s *TestStore) Options() *store.Options {
+	return &s.Opts
 }
 
 func (s *TestStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *store.StorePackageInfo, error) {

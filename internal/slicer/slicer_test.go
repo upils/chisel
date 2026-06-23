@@ -2003,7 +2003,7 @@ var slicerTests = []slicerTest{{
 		"slices/mydir/store-pkg.yaml": `
 			package: store-pkg
 			store: bin
-			default-track: stable
+			default-track: 3.1
 			slices:
 				myslice:
 					contents:
@@ -2140,14 +2140,19 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 			}
 
 			stores := map[string]store.Store{}
-			for name := range release.Stores {
+			for name, relStore := range release.Stores {
 				pkgs := make(map[string]*testutil.TestPackage)
 				for _, pkg := range test.pkgs {
 					if pkg.Store == name {
 						pkgs[pkg.Name] = pkg
 					}
 				}
-				stores[name] = &testutil.TestStore{Packages: pkgs}
+				stores[name] = &testutil.TestStore{
+					Packages: pkgs,
+					Opts: store.Options{
+						Version: relStore.Version,
+					},
+				}
 			}
 
 			options := slicer.RunOptions{
