@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -52,8 +53,8 @@ type binStore struct {
 }
 
 const (
-	binAPIBase             = "https://api.snapcraft.io/v2/bins"
-	binAPIBaseStaging      = "https://api.staging.snapcraft.io/v2/bins"
+	binAPIBase             = "https://api.snapcraft.io/v2"
+	binAPIBaseStaging      = "https://api.staging.snapcraft.io/v2"
 	binDownloadHost        = "api.snapcraft.io"
 	binDownloadHostStaging = "api.staging.snapcraft.io"
 	binStagingEnvVar       = "CHISEL_BIN_STAGING"
@@ -101,23 +102,37 @@ func Open(options *Options) (Store, error) {
 	}
 }
 
-// binInfoResponse represents the JSON response from the bin store info endpoint.
-type binInfoResponse struct {
-	Name       string          `json:"name"`
-	PackageID  string          `json:"package-id"`
-	ChannelMap []binChannelMap `json:"channel-map"`
+// resolveRequest is the body sent to the revisions/resolve endpoint.
+type resolveRequest struct {
+	Packages []resolvePackage `json:"packages"`
 }
 
-type binChannelMap struct {
-	Channel  binChannel  `json:"channel"`
+type resolvePackage struct {
+	InstanceKey string      `json:"instance-key"`
+	Namespace   string      `json:"namespace"`
+	Name        string      `json:"name"`
+	Channel     string      `json:"channel"`
+	Platform    binPlatform `json:"platform"`
+}
+
+type resolveResponse struct {
+	PackageResults []resolveResult `json:"package-results"`
+}
+
+type resolveResult struct {
+	InstanceKey string        `json:"instance-key"`
+	Status      string        `json:"status"`
+	Error       *resolveError `json:"error"`
+	Result      *resolveEntry `json:"result"`
+}
+
+type resolveError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type resolveEntry struct {
 	Revision binRevision `json:"revision"`
-}
-
-type binChannel struct {
-	Name     string      `json:"name"`
-	Risk     string      `json:"risk"`
-	Track    string      `json:"track"`
-	Platform binPlatform `json:"platform"`
 }
 
 type binPlatform struct {
@@ -136,7 +151,10 @@ type binDownload struct {
 	Size   int64  `json:"size"`
 }
 
-func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
+// resolveRevision resolves a single package revision via the store API. It
+// returns the matching revision or an error if the package is not found or has
+// no release for the requested channel and architecture.
+func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, error) {
 	if !nameExp.MatchString(name) {
 		return nil, fmt.Errorf("invalid package name %q", name)
 	}
@@ -144,15 +162,27 @@ func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("internal error: cannot parse bin store URL: %v", err)
 	}
-	u = u.JoinPath("info", name)
-	u.RawQuery = url.Values{
-		"fields": {"download,version,revision,channel-map"},
-	}.Encode()
+	u = u.JoinPath("revisions", "resolve")
 
-	req, err := http.NewRequest("GET", u.String(), nil)
+	reqBody, err := json.Marshal(resolveRequest{
+		Packages: []resolvePackage{{
+			InstanceKey: name,
+			Namespace:   string(storeKindBin),
+			Name:        name,
+			Channel:     track + "/" + risk,
+			Platform:    binPlatform{Architecture: s.options.Arch},
+		}},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("internal error: cannot encode resolve request: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("cannot create HTTP request: %v", err)
 	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := httpDo(req)
 	if err != nil {
@@ -160,48 +190,31 @@ func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
 	}
 	defer resp.Body.Close()
 
-	switch resp.StatusCode {
-	case 200:
-		// ok
-	case 404:
-		return nil, fmt.Errorf("bin %q not found", name)
-	default:
+	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("cannot fetch from bin store: %v", resp.Status)
 	}
 
-	var info binInfoResponse
-	err = json.NewDecoder(resp.Body).Decode(&info)
+	var res resolveResponse
+	err = json.NewDecoder(resp.Body).Decode(&res)
 	if err != nil {
 		return nil, fmt.Errorf("cannot decode bin store response: %v", err)
 	}
-	return &info, nil
-}
 
-func resolveRisk(risk string) string {
-	if risk == "" {
-		return defaultRisk
+	if len(res.PackageResults) == 0 {
+		return nil, fmt.Errorf("bin %q not found", name)
 	}
-	return risk
-}
-
-// selectRevision finds the channel-map entry matching the requested track,
-// risk, and architecture, returning its revision. It fails if the matched
-// revision has no download digest.
-func selectRevision(info *binInfoResponse, arch, track, risk string) (*binRevision, error) {
-	for i := range info.ChannelMap {
-		entry := &info.ChannelMap[i]
-		if entry.Channel.Track != track || entry.Channel.Risk != risk {
-			continue
+	result := &res.PackageResults[0]
+	if result.Status != "ok" || result.Result == nil {
+		if result.Error != nil {
+			return nil, fmt.Errorf("bin %q not found: %s", name, result.Error.Message)
 		}
-		if entry.Channel.Platform.Architecture != arch {
-			continue
-		}
-		if entry.Revision.Download.SHA384 == "" {
-			return nil, fmt.Errorf("bin %q has no download digest", info.Name)
-		}
-		return &entry.Revision, nil
+		return nil, fmt.Errorf("bin %q not found", name)
 	}
-	return nil, fmt.Errorf("bin %q has no %s/%s release for architecture %q", info.Name, track, risk, arch)
+	rev := &result.Result.Revision
+	if rev.Download.SHA384 == "" {
+		return nil, fmt.Errorf("bin %q has no download digest", name)
+	}
+	return rev, nil
 }
 
 // nameExp matches a valid package name. It deliberately forbids "/" and any
@@ -231,12 +244,10 @@ func (s *binStore) Options() *Options {
 }
 
 func (s *binStore) Info(name, track, risk string) (*StorePackageInfo, error) {
-	risk = resolveRisk(risk)
-	resp, err := s.fetchBinInfo(name)
-	if err != nil {
-		return nil, err
+	if risk == "" {
+		risk = defaultRisk
 	}
-	rev, err := selectRevision(resp, s.options.Arch, track, risk)
+	rev, err := s.resolveRevision(name, track, risk)
 	if err != nil {
 		return nil, err
 	}
@@ -254,14 +265,12 @@ func (s *binStore) Exists(name, track, risk string) bool {
 }
 
 func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error) {
-	risk = resolveRisk(risk)
+	if risk == "" {
+		risk = defaultRisk
+	}
 	logf("Fetching bin %s %s/%s ...", name, track, risk)
 
-	resp, err := s.fetchBinInfo(name)
-	if err != nil {
-		return nil, nil, err
-	}
-	rev, err := selectRevision(resp, s.options.Arch, track, risk)
+	rev, err := s.resolveRevision(name, track, risk)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -274,7 +283,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		SHA384:   rev.Download.SHA384,
 	}
 
-	const digestKind = cache.SHA256
+	const digestKind = cache.SHA384
 	// Check cache first.
 	reader, err := s.cache.Open(digestKind, digest)
 	if err == nil {
