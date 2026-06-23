@@ -125,9 +125,9 @@ type binRevision struct {
 }
 
 type binDownload struct {
-	URL     string `json:"url"`
-	SHA3384 string `json:"sha3-384"`
-	Size    int64  `json:"size"`
+	URL    string `json:"url"`
+	SHA384 string `json:"sha3-384"`
+	Size   int64  `json:"size"`
 }
 
 func (s *binStore) fetchBinInfo(name string) (*binInfoResponse, error) {
@@ -190,7 +190,7 @@ func selectRevision(info *binInfoResponse, arch, track, risk string) (*binRevisi
 		if entry.Channel.Platform.Architecture != arch {
 			continue
 		}
-		if entry.Revision.Download.SHA3384 == "" {
+		if entry.Revision.Download.SHA384 == "" {
 			return nil, fmt.Errorf("bin %q has no download digest", info.Name)
 		}
 		return &entry.Revision, nil
@@ -243,7 +243,7 @@ func (s *binStore) Info(name, track, risk string) (*StorePackageInfo, error) {
 		Name:     name,
 		Version:  rev.Version,
 		Revision: rev.Revision,
-		SHA384:   rev.Download.SHA3384,
+		SHA384:   rev.Download.SHA384,
 	}, nil
 }
 
@@ -265,12 +265,12 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		return nil, nil, err
 	}
 
-	digest := rev.Download.SHA3384
+	digest := rev.Download.SHA384
 	info := &StorePackageInfo{
 		Name:     name,
 		Version:  rev.Version,
 		Revision: rev.Revision,
-		SHA384:   rev.Download.SHA3384,
+		SHA384:   rev.Download.SHA384,
 	}
 
 	// Check cache first.
