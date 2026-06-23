@@ -277,7 +277,7 @@ func Run(options *RunOptions) error {
 		// Store packages are distributed as plain tarballs, whose extraction
 		// is not yet implemented. Fail until the format support is in place.
 		if src.kind == sourceStore {
-			return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", src.pkg.Name)
+			return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", src.pkg.RealName)
 		}
 		err := deb.Extract(reader, &deb.ExtractOptions{
 			Package:   slice.Package,
