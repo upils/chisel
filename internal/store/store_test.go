@@ -74,7 +74,7 @@ func sha384Hash(data []byte) string {
 }
 
 func makeBinInfoBody(name, track, risk, arch, version string, revision int, sha384 string) []byte {
-	downloadURL := "https://storage.snapcraftcontent.com/bins/" + name + ".tar.xz"
+	downloadURL := "https://api.snapcraft.io/api/v1/bins/download/" + name + ".bin"
 	return makeBinInfoBodyWithURL(name, track, risk, arch, version, revision, sha384, downloadURL)
 }
 
@@ -105,35 +105,49 @@ func makeBinInfoBodyWithURL(name, track, risk, arch, version string, revision in
 
 func (s *storeSuite) TestValidateDownloadURL(c *C) {
 	tests := []struct {
-		url   string
-		error string
+		url         string
+		allowedHost string
+		error       string
 	}{
-		{"https://storage.snapcraftcontent.com/bins/foo.tar.xz", ""},
-		{"https://api.snapcraft.io/v2/bins/foo", ""},
-		{"https://api.staging.snapcraft.io/v2/bins/foo", ""},
-		{"https://sub.storage.snapcraftcontent.com/bins/foo.tar.xz", ""},
-		{"https://storage.snapcraftcontent.com:443/bins/foo.tar.xz", ""},
-		{"https://Storage.SnapcraftContent.Com/bins/foo.tar.xz", ""},
+		{"https://api.snapcraft.io/api/v1/bins/download/foo.bin", "api.snapcraft.io", ""},
+		// Staging host is rejected when the production host is allowed.
 		{
-			"http://storage.snapcraftcontent.com/bins/foo.tar.xz",
-			`bin download URL must use HTTPS: "http://storage.snapcraftcontent.com/bins/foo.tar.xz"`,
+			"https://api.staging.snapcraft.io/api/v1/bins/download/foo.bin",
+			"api.snapcraft.io",
+			`bin download URL has untrusted host "api.staging.snapcraft.io"`,
+		},
+		// Staging host is allowed when it is the allowed host.
+		{"https://api.staging.snapcraft.io/api/v1/bins/download/foo.bin", "api.staging.snapcraft.io", ""},
+		// Production API host is rejected when the staging host is allowed.
+		{
+			"https://api.snapcraft.io/api/v1/bins/download/foo.bin",
+			"api.staging.snapcraft.io",
+			`bin download URL has untrusted host "api.snapcraft.io"`,
 		},
 		{
-			"https://evil.example.com/bins/foo.tar.xz",
+			"http://api.snapcraft.io/api/v1/bins/download/foo.bin",
+			"api.snapcraft.io",
+			`bin download URL must use HTTPS: "http://api.snapcraft.io/api/v1/bins/download/foo.bin"`,
+		},
+		{
+			"https://evil.example.com/api/v1/bins/download/foo.bin",
+			"api.snapcraft.io",
 			`bin download URL has untrusted host "evil.example.com"`,
 		},
 		{
-			"https://Evil.Example.Com/bins/foo.tar.xz",
+			"https://Evil.Example.Com/api/v1/bins/download/foo.bin",
+			"api.snapcraft.io",
 			`bin download URL has untrusted host "evil.example.com"`,
 		},
 		{
-			"https://storage.snapcraftcontent.com.evil.com/bins/foo.tar.xz",
-			`bin download URL has untrusted host "storage.snapcraftcontent.com.evil.com"`,
+			"https://api.snapcraft.io.evil.com/api/v1/bins/download/foo.bin",
+			"api.snapcraft.io",
+			`bin download URL has untrusted host "api.snapcraft.io.evil.com"`,
 		},
-		{"://invalid-url", `cannot parse bin download URL: .*`},
+		{"://invalid-url", "api.snapcraft.io", `cannot parse bin download URL: .*`},
 	}
 	for _, test := range tests {
-		err := store.ValidateDownloadURL(test.url)
+		err := store.ValidateDownloadURL(test.url, test.allowedHost)
 		if test.error == "" {
 			c.Assert(err, IsNil)
 		} else {
@@ -221,11 +235,11 @@ var infoTests = []infoTest{{
 		"channel-map": [
 			{
 				"channel": {"name": "latest/stable", "risk": "stable", "track": "latest", "platform": {"architecture": "arm64"}},
-				"revision": {"version": "8.0.0", "revision": 1, "download": {"url": "https://storage.snapcraftcontent.com/bins/curl.tar.xz", "sha3-384": "arm64hash", "size": 1024}}
+				"revision": {"version": "8.0.0", "revision": 1, "download": {"url": "https://api.snapcraft.io/api/v1/bins/download/curl.bin", "sha3-384": "arm64hash", "size": 1024}}
 			},
 			{
 				"channel": {"name": "latest/stable", "risk": "stable", "track": "latest", "platform": {"architecture": "amd64"}},
-				"revision": {"version": "8.5.0", "revision": 42, "download": {"url": "https://storage.snapcraftcontent.com/bins/curl.tar.xz", "sha3-384": "amd64hash", "size": 1024}}
+				"revision": {"version": "8.5.0", "revision": 42, "download": {"url": "https://api.snapcraft.io/api/v1/bins/download/curl.bin", "sha3-384": "amd64hash", "size": 1024}}
 			}
 		]
 	}`,

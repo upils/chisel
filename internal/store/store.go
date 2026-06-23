@@ -15,7 +15,7 @@ import (
 	"github.com/canonical/chisel/internal/deb"
 )
 
-// Store provides access to packages from the Snapcraft store API.
+// Store provides access to packages from the Store API.
 type Store interface {
 	Options() *Options
 	Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error)
@@ -42,20 +42,21 @@ type storeKind string
 
 const storeKindBin storeKind = "bin"
 
-// defaultRisk is the channel risk used when a specific risk has not been
-// requested.
 const defaultRisk = "stable"
 
 type binStore struct {
-	options Options
-	cache   *cache.Cache
-	apiURL  string
+	options      Options
+	cache        *cache.Cache
+	apiURL       string
+	downloadHost string
 }
 
 const (
-	binAPIBase       = "https://api.snapcraft.io/v2/bins"
-	binAPIStaging    = "https://api.staging.snapcraft.io/v2/bins"
-	binStagingEnvVar = "CHISEL_BIN_STAGING"
+	binAPIBase             = "https://api.snapcraft.io/v2/bins"
+	binAPIBaseStaging      = "https://api.staging.snapcraft.io/v2/bins"
+	binDownloadHost        = "api.snapcraft.io"
+	binDownloadHostStaging = "api.staging.snapcraft.io"
+	binStagingEnvVar       = "CHISEL_BIN_STAGING"
 )
 
 var httpClient = &http.Client{
@@ -84,13 +85,16 @@ func Open(options *Options) (Store, error) {
 	switch storeKind(options.Kind) {
 	case storeKindBin:
 		apiURL := binAPIBase
+		downloadHost := binDownloadHost
 		if os.Getenv(binStagingEnvVar) != "" {
-			apiURL = binAPIStaging
+			apiURL = binAPIBaseStaging
+			downloadHost = binDownloadHostStaging
 		}
 		return &binStore{
-			options: *options,
-			cache:   &cache.Cache{Dir: options.CacheDir},
-			apiURL:  apiURL,
+			options:      *options,
+			cache:        &cache.Cache{Dir: options.CacheDir},
+			apiURL:       apiURL,
+			downloadHost: downloadHost,
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported store kind %q", options.Kind)
@@ -205,16 +209,9 @@ func selectRevision(info *binInfoResponse, arch, track, risk string) (*binRevisi
 // store API URL path when interpolated into it.
 var nameExp = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
 
-// allowedDownloadHosts lists the hosts from which bin downloads are permitted.
-var allowedDownloadHosts = []string{
-	"api.snapcraft.io",
-	"api.staging.snapcraft.io",
-	"storage.snapcraftcontent.com",
-}
-
-// validateDownloadURL checks that the download URL is HTTPS and from an
+// validateDownloadURL checks that the download URL is HTTPS and from the
 // allowed host.
-func validateDownloadURL(downloadURL string) error {
+func validateDownloadURL(downloadURL, allowedHost string) error {
 	u, err := url.Parse(downloadURL)
 	if err != nil {
 		return fmt.Errorf("cannot parse bin download URL: %v", err)
@@ -223,10 +220,8 @@ func validateDownloadURL(downloadURL string) error {
 		return fmt.Errorf("bin download URL must use HTTPS: %q", downloadURL)
 	}
 	host := strings.ToLower(u.Hostname())
-	for _, allowed := range allowedDownloadHosts {
-		if host == allowed || strings.HasSuffix(host, "."+allowed) {
-			return nil
-		}
+	if host == allowedHost || strings.HasSuffix(host, "."+allowedHost) {
+		return nil
 	}
 	return fmt.Errorf("bin download URL has untrusted host %q", host)
 }
@@ -279,8 +274,9 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		SHA384:   rev.Download.SHA384,
 	}
 
+	const digestKind = cache.SHA256
 	// Check cache first.
-	reader, err := s.cache.Open(cache.SHA384, digest)
+	reader, err := s.cache.Open(digestKind, digest)
 	if err == nil {
 		logf("Using cached bin %s", name)
 		return reader, info, nil
@@ -289,7 +285,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 	}
 
 	// Download the bin.
-	err = validateDownloadURL(rev.Download.URL)
+	err = validateDownloadURL(rev.Download.URL, s.downloadHost)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -308,7 +304,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		return nil, nil, fmt.Errorf("cannot download bin %q: %v", name, httpResp.Status)
 	}
 
-	writer := s.cache.Create(cache.SHA384, digest)
+	writer := s.cache.Create(digestKind, digest)
 	defer writer.Close()
 
 	_, err = io.Copy(writer, httpResp.Body)
@@ -319,7 +315,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		return nil, nil, fmt.Errorf("cannot fetch bin %q: %v", name, err)
 	}
 
-	reader, err = s.cache.Open(cache.SHA384, digest)
+	reader, err = s.cache.Open(digestKind, writer.Digest())
 	if err != nil {
 		return nil, nil, err
 	}
