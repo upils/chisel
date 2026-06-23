@@ -167,6 +167,7 @@ func (s *storeSuite) TestOpenArchValidation(c *C) {
 
 type infoTest struct {
 	summary    string
+	risk       string
 	status     int
 	statusText string
 	body       string
@@ -176,32 +177,44 @@ type infoTest struct {
 
 var infoTests = []infoTest{{
 	summary: "Successful info",
+	risk:    "stable",
+	status:  200,
+	body:    string(makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")),
+	info:    &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "abc123"},
+}, {
+	summary: "Defaults to stable risk when unspecified",
+	risk:    "",
 	status:  200,
 	body:    string(makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")),
 	info:    &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "abc123"},
 }, {
 	summary: "Package not found",
+	risk:    "stable",
 	status:  404,
 	body:    "not found",
 	error:   `bin "curl" not found`,
 }, {
 	summary: "No release for the requested architecture",
+	risk:    "stable",
 	status:  200,
 	body:    string(makeBinInfoBody("curl", "latest", "stable", "arm64", "8.5.0", 42, "abc123")),
 	error:   `bin "curl" has no latest/stable release for architecture "amd64"`,
 }, {
 	summary:    "Server error",
+	risk:       "stable",
 	status:     500,
 	statusText: "500 Internal Server Error",
 	body:       "boom",
 	error:      "cannot fetch from bin store: 500 Internal Server Error",
 }, {
 	summary: "Malformed response body",
+	risk:    "stable",
 	status:  200,
 	body:    "not json",
 	error:   "cannot decode bin store response: .*",
 }, {
 	summary: "Selects the entry matching the requested architecture",
+	risk:    "stable",
 	status:  200,
 	body: `{
 		"name": "curl",
@@ -219,6 +232,7 @@ var infoTests = []infoTest{{
 	info: &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "amd64hash"},
 }, {
 	summary: "Missing download digest",
+	risk:    "stable",
 	status:  200,
 	body:    string(makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")),
 	error:   `bin "curl" has no download digest`,
@@ -243,7 +257,7 @@ func (s *storeSuite) TestInfo(c *C) {
 		})
 		c.Assert(err, IsNil)
 
-		info, err := src.Info("curl", "latest", "stable")
+		info, err := src.Info("curl", "latest", test.risk)
 		if test.error != "" {
 			c.Assert(err, ErrorMatches, test.error)
 			continue
