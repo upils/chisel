@@ -127,7 +127,6 @@ type resolveResult struct {
 }
 
 type resolveError struct {
-	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
@@ -201,6 +200,9 @@ func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, erro
 
 	if len(res.PackageResults) == 0 {
 		return nil, fmt.Errorf("package %q not found", name)
+	}
+	if len(res.PackageResults) > 1 {
+		return nil, fmt.Errorf("internal error: store returned %d results for package %q", len(res.PackageResults), name)
 	}
 	result := &res.PackageResults[0]
 	if result.Status != "ok" || result.Result == nil {
