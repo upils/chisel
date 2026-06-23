@@ -123,7 +123,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 	}
 
 	stores := make(map[string]store.Store)
-	for _, storeInfo := range release.Stores {
+	for storeName, storeInfo := range release.Stores {
 		openStore, err := store.Open(&store.Options{
 			Arch:     cmd.Arch,
 			CacheDir: cache.DefaultDir("chisel"),
@@ -133,7 +133,7 @@ func (cmd *cmdCut) Execute(args []string) error {
 		if err != nil {
 			return err
 		}
-		stores[storeInfo.Name] = openStore
+		stores[storeName] = openStore
 	}
 
 	err = slicer.Run(&slicer.RunOptions{

@@ -18,12 +18,11 @@ import (
 )
 
 type storeSuite struct {
-	tempDir     string
-	cacheDir    string
-	fakeDoFunc  func(req *http.Request) (*http.Response, error)
-	restoreDo   func()
-	restoreBulk func()
-	envRestore  func()
+	tempDir    string
+	cacheDir   string
+	fakeDoFunc func(req *http.Request) (*http.Response, error)
+	restore    func()
+	envRestore func()
 }
 
 var _ = Suite(&storeSuite{})
@@ -34,14 +33,12 @@ func (s *storeSuite) SetUpTest(c *C) {
 	c.Assert(os.MkdirAll(s.cacheDir, 0o755), IsNil)
 
 	s.envRestore = fakeEnv("")
-	s.restoreDo = store.SetHTTPDo(s.doRequest)
-	s.restoreBulk = store.SetBulkDo(s.doRequest)
+	s.restore = store.FakeDo(s.doRequest)
 	s.fakeDoFunc = nil
 }
 
 func (s *storeSuite) TearDownTest(c *C) {
-	s.restoreDo()
-	s.restoreBulk()
+	s.restore()
 	s.envRestore()
 }
 
@@ -133,7 +130,7 @@ func (s *storeSuite) TestValidateDownloadURL(c *C) {
 		{
 			"https://api.staging.snapcraft.io/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
-			`bin download URL has untrusted host "api.staging.snapcraft.io"`,
+			`download URL has untrusted host "api.staging.snapcraft.io"`,
 		},
 		// Staging host is allowed when it is the allowed host.
 		{"https://api.staging.snapcraft.io/api/v1/bins/download/foo.bin", "api.staging.snapcraft.io", ""},
@@ -141,29 +138,29 @@ func (s *storeSuite) TestValidateDownloadURL(c *C) {
 		{
 			"https://api.snapcraft.io/api/v1/bins/download/foo.bin",
 			"api.staging.snapcraft.io",
-			`bin download URL has untrusted host "api.snapcraft.io"`,
+			`download URL has untrusted host "api.snapcraft.io"`,
 		},
 		{
 			"http://api.snapcraft.io/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
-			`bin download URL must use HTTPS: "http://api.snapcraft.io/api/v1/bins/download/foo.bin"`,
+			`download URL must use HTTPS: "http://api.snapcraft.io/api/v1/bins/download/foo.bin"`,
 		},
 		{
 			"https://evil.example.com/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
-			`bin download URL has untrusted host "evil.example.com"`,
+			`download URL has untrusted host "evil.example.com"`,
 		},
 		{
 			"https://Evil.Example.Com/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
-			`bin download URL has untrusted host "evil.example.com"`,
+			`download URL has untrusted host "evil.example.com"`,
 		},
 		{
 			"https://api.snapcraft.io.evil.com/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
-			`bin download URL has untrusted host "api.snapcraft.io.evil.com"`,
+			`download URL has untrusted host "api.snapcraft.io.evil.com"`,
 		},
-		{"://invalid-url", "api.snapcraft.io", `cannot parse bin download URL: .*`},
+		{"://invalid-url", "api.snapcraft.io", `cannot parse download URL: .*`},
 	}
 	for _, test := range tests {
 		err := store.ValidateDownloadURL(test.url, test.allowedHost)
@@ -225,26 +222,26 @@ var infoTests = []infoTest{{
 	risk:    "stable",
 	status:  200,
 	body:    string(makeResolveErrorBody("curl", "package-not-found", "Package not found")),
-	error:   `bin "curl" not found: Package not found`,
+	error:   `package "curl" not found: Package not found`,
 }, {
 	summary:    "Server error",
 	risk:       "stable",
 	status:     500,
 	statusText: "500 Internal Server Error",
 	body:       "boom",
-	error:      "cannot fetch from bin store: 500 Internal Server Error",
+	error:      "cannot fetch from store: 500 Internal Server Error",
 }, {
 	summary: "Malformed response body",
 	risk:    "stable",
 	status:  200,
 	body:    "not json",
-	error:   "cannot decode bin store response: .*",
+	error:   "cannot decode store response: .*",
 }, {
 	summary: "Missing download digest",
 	risk:    "stable",
 	status:  200,
 	body:    string(makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")),
-	error:   `bin "curl" has no download digest`,
+	error:   `package "curl" has no download digest`,
 }}
 
 func (s *storeSuite) TestInfo(c *C) {
@@ -465,7 +462,7 @@ func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 	c.Assert(err, IsNil)
 
 	_, _, err = src.Fetch("curl", "latest", "stable")
-	c.Assert(err, ErrorMatches, `bin download URL must use HTTPS: "http://evil.example.com/bins/curl.tar.xz"`)
+	c.Assert(err, ErrorMatches, `download URL must use HTTPS: "http://evil.example.com/bins/curl.tar.xz"`)
 }
 
 func (s *storeSuite) TestFetchMissingDigest(c *C) {
@@ -487,7 +484,7 @@ func (s *storeSuite) TestFetchMissingDigest(c *C) {
 	c.Assert(err, IsNil)
 
 	_, _, err = src.Fetch("curl", "latest", "stable")
-	c.Assert(err, ErrorMatches, `bin "curl" has no download digest`)
+	c.Assert(err, ErrorMatches, `package "curl" has no download digest`)
 }
 
 func (s *storeSuite) TestStagingEnvVar(c *C) {
@@ -550,5 +547,5 @@ func (s *storeSuite) TestFetchDownloadError(c *C) {
 	c.Assert(err, IsNil)
 
 	_, _, err = src.Fetch("curl", "latest", "stable")
-	c.Assert(err, ErrorMatches, `cannot download bin "curl": 500 Internal Server Error`)
+	c.Assert(err, ErrorMatches, `cannot download package "curl": 500 Internal Server Error`)
 }

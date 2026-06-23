@@ -148,7 +148,6 @@ type binRevision struct {
 type binDownload struct {
 	URL    string `json:"url"`
 	SHA384 string `json:"sha3-384"`
-	Size   int64  `json:"size"`
 }
 
 // resolveRevision resolves a single package revision via the store API. It
@@ -186,33 +185,33 @@ func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, erro
 
 	resp, err := httpDo(req)
 	if err != nil {
-		return nil, fmt.Errorf("cannot talk to bin store: %v", err)
+		return nil, fmt.Errorf("cannot talk to store: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("cannot fetch from bin store: %v", resp.Status)
+		return nil, fmt.Errorf("cannot fetch from store: %v", resp.Status)
 	}
 
 	var res resolveResponse
 	err = json.NewDecoder(resp.Body).Decode(&res)
 	if err != nil {
-		return nil, fmt.Errorf("cannot decode bin store response: %v", err)
+		return nil, fmt.Errorf("cannot decode store response: %v", err)
 	}
 
 	if len(res.PackageResults) == 0 {
-		return nil, fmt.Errorf("bin %q not found", name)
+		return nil, fmt.Errorf("package %q not found", name)
 	}
 	result := &res.PackageResults[0]
 	if result.Status != "ok" || result.Result == nil {
 		if result.Error != nil {
-			return nil, fmt.Errorf("bin %q not found: %s", name, result.Error.Message)
+			return nil, fmt.Errorf("package %q not found: %s", name, result.Error.Message)
 		}
-		return nil, fmt.Errorf("bin %q not found", name)
+		return nil, fmt.Errorf("package %q not found", name)
 	}
 	rev := &result.Result.Revision
 	if rev.Download.SHA384 == "" {
-		return nil, fmt.Errorf("bin %q has no download digest", name)
+		return nil, fmt.Errorf("package %q has no download digest", name)
 	}
 	return rev, nil
 }
@@ -227,16 +226,16 @@ var nameExp = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
 func validateDownloadURL(downloadURL, allowedHost string) error {
 	u, err := url.Parse(downloadURL)
 	if err != nil {
-		return fmt.Errorf("cannot parse bin download URL: %v", err)
+		return fmt.Errorf("cannot parse download URL: %v", err)
 	}
 	if u.Scheme != "https" {
-		return fmt.Errorf("bin download URL must use HTTPS: %q", downloadURL)
+		return fmt.Errorf("download URL must use HTTPS: %q", downloadURL)
 	}
 	host := strings.ToLower(u.Hostname())
 	if host == allowedHost || strings.HasSuffix(host, "."+allowedHost) {
 		return nil
 	}
-	return fmt.Errorf("bin download URL has untrusted host %q", host)
+	return fmt.Errorf("download URL has untrusted host %q", host)
 }
 
 func (s *binStore) Options() *Options {
@@ -268,7 +267,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 	if risk == "" {
 		risk = defaultRisk
 	}
-	logf("Fetching bin %s %s/%s ...", name, track, risk)
+	logf("Fetching package %s %s/%s...", name, track, risk)
 
 	rev, err := s.resolveRevision(name, track, risk)
 	if err != nil {
@@ -287,13 +286,13 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 	// Check cache first.
 	reader, err := s.cache.Open(digestKind, digest)
 	if err == nil {
-		logf("Using cached bin %s", name)
+		logf("Using cached package %s", name)
 		return reader, info, nil
 	} else if err != cache.ErrMiss {
 		return nil, nil, err
 	}
 
-	// Download the bin.
+	// Download the package.
 	err = validateDownloadURL(rev.Download.URL, s.downloadHost)
 	if err != nil {
 		return nil, nil, err
@@ -305,12 +304,12 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 
 	httpResp, err := bulkDo(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot download bin %q: %v", name, err)
+		return nil, nil, fmt.Errorf("cannot download package %q: %v", name, err)
 	}
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode != 200 {
-		return nil, nil, fmt.Errorf("cannot download bin %q: %v", name, httpResp.Status)
+		return nil, nil, fmt.Errorf("cannot download package %q: %v", name, httpResp.Status)
 	}
 
 	writer := s.cache.Create(digestKind, digest)
@@ -321,7 +320,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		err = writer.Close()
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot fetch bin %q: %v", name, err)
+		return nil, nil, fmt.Errorf("cannot fetch package %q: %v", name, err)
 	}
 
 	reader, err = s.cache.Open(digestKind, writer.Digest())
