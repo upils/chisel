@@ -7,14 +7,13 @@ var (
 	BinStagingEnvVar    = binStagingEnvVar
 )
 
-func SetHTTPDo(fn func(req *http.Request) (*http.Response, error)) (restore func()) {
-	saved := httpDo
-	httpDo = fn
-	return func() { httpDo = saved }
-}
-
-func SetBulkDo(fn func(req *http.Request) (*http.Response, error)) (restore func()) {
-	saved := bulkDo
-	bulkDo = fn
-	return func() { bulkDo = saved }
+func FakeDo(do func(req *http.Request) (*http.Response, error)) (restore func()) {
+	_httpDo := httpDo
+	_bulkDo := bulkDo
+	httpDo = do
+	bulkDo = do
+	return func() {
+		httpDo = _httpDo
+		bulkDo = _bulkDo
+	}
 }

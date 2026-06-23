@@ -177,6 +177,8 @@ func Run(options *RunOptions) error {
 			// The package metadata returned by the store is not yet recorded
 			// in the manifest; this is handled in a subsequent change.
 			// Risk is left unspecified for now; the store applies its default.
+			// The store channel track is "<default-track>-<store version>",
+			// e.g. "3.1-26.10". The version pins the release series.
 			track := src.pkg.DefaultTrack + "-" + src.store.Options().Version
 			reader, _, err = src.store.Fetch(src.pkg.RealName, track, "")
 			if err != nil {
@@ -559,6 +561,7 @@ func resolvePkgSources(archives map[string]archive.Archive, stores map[string]st
 				return nil, fmt.Errorf("internal error: no store handle for store %q", pkg.Store)
 			}
 			pkgSources[pkg.Name] = &pkgSourceInfo{
+				arch:  storeHandle.Options().Arch,
 				kind:  sourceStore,
 				store: storeHandle,
 				pkg:   pkg,
@@ -591,23 +594,6 @@ func resolvePkgSources(archives map[string]archive.Archive, stores map[string]st
 			kind:    sourceArchive,
 			archive: chosen,
 			pkg:     pkg,
-		}
-	}
-
-	// Until a store is implemented as a package source there is no proper way to
-	// determine the architecture for store packages.
-	// So relying on the fact that all packages in a selection share the same architecture,
-	// we can borrow it from any archive package that was already resolved.
-	var arch string
-	for _, src := range pkgSources {
-		if src.kind == sourceArchive {
-			arch = src.arch
-			break
-		}
-	}
-	for _, src := range pkgSources {
-		if src.kind == sourceStore {
-			src.arch = arch
 		}
 	}
 
