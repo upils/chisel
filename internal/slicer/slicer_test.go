@@ -2010,7 +2010,7 @@ var slicerTests = []slicerTest{{
 						/dir/store-file:
 		`,
 	},
-	error: `cannot extract package "bin-store-pkg" from store: store packages are not yet supported`,
+	error: `cannot extract package "store-pkg" from store: store packages are not yet supported`,
 }}
 
 func (s *S) TestRun(c *C) {
