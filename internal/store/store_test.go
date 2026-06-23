@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -73,34 +74,52 @@ func sha384Hash(data []byte) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func makeBinInfoBody(name, track, risk, arch, version string, revision int, sha384 string) []byte {
+func makeResolveBody(name, track, risk, arch, version string, revision int, sha384 string) []byte {
 	downloadURL := "https://api.snapcraft.io/api/v1/bins/download/" + name + ".bin"
-	return makeBinInfoBodyWithURL(name, track, risk, arch, version, revision, sha384, downloadURL)
+	return makeResolveBodyWithURL(name, track, risk, arch, version, revision, sha384, downloadURL)
 }
 
-func makeBinInfoBodyWithURL(name, track, risk, arch, version string, revision int, sha384, downloadURL string) []byte {
+func makeResolveBodyWithURL(name, track, risk, arch, version string, revision int, sha384, downloadURL string) []byte {
 	return []byte(fmt.Sprintf(`{
-		"name": %q,
-		"channel-map": [
+		"craft-results": [],
+		"package-results": [
 			{
-				"channel": {
-					"name": %q,
-					"risk": %q,
-					"track": %q,
-					"platform": {"architecture": %q}
-				},
-				"revision": {
-					"version": %q,
-					"revision": %d,
-					"download": {
-						"url": %q,
-						"sha3-384": %q,
-						"size": 1024
+				"instance-key": %q,
+				"status": "ok",
+				"result": {
+					"channel": {
+						"name": %q,
+						"risk": %q,
+						"track": %q,
+						"platform": {"architecture": %q}
+					},
+					"revision": {
+						"version": %q,
+						"revision": %d,
+						"download": {
+							"url": %q,
+							"sha3-384": %q,
+							"size": 1024
+						}
 					}
 				}
 			}
 		]
 	}`, name, track+"/"+risk, risk, track, arch, version, revision, downloadURL, sha384))
+}
+
+func makeResolveErrorBody(name, code, message string) []byte {
+	return []byte(fmt.Sprintf(`{
+		"craft-results": [],
+		"package-results": [
+			{
+				"instance-key": %q,
+				"status": "error",
+				"error": {"code": %q, "message": %q},
+				"result": null
+			}
+		]
+	}`, name, code, message))
 }
 
 func (s *storeSuite) TestValidateDownloadURL(c *C) {
@@ -193,26 +212,20 @@ var infoTests = []infoTest{{
 	summary: "Successful info",
 	risk:    "stable",
 	status:  200,
-	body:    string(makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")),
+	body:    string(makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")),
 	info:    &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "abc123"},
 }, {
 	summary: "Defaults to stable risk when unspecified",
 	risk:    "",
 	status:  200,
-	body:    string(makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")),
+	body:    string(makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")),
 	info:    &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "abc123"},
 }, {
 	summary: "Package not found",
 	risk:    "stable",
-	status:  404,
-	body:    "not found",
-	error:   `bin "curl" not found`,
-}, {
-	summary: "No release for the requested architecture",
-	risk:    "stable",
 	status:  200,
-	body:    string(makeBinInfoBody("curl", "latest", "stable", "arm64", "8.5.0", 42, "abc123")),
-	error:   `bin "curl" has no latest/stable release for architecture "amd64"`,
+	body:    string(makeResolveErrorBody("curl", "package-not-found", "Package not found")),
+	error:   `bin "curl" not found: Package not found`,
 }, {
 	summary:    "Server error",
 	risk:       "stable",
@@ -227,28 +240,10 @@ var infoTests = []infoTest{{
 	body:    "not json",
 	error:   "cannot decode bin store response: .*",
 }, {
-	summary: "Selects the entry matching the requested architecture",
-	risk:    "stable",
-	status:  200,
-	body: `{
-		"name": "curl",
-		"channel-map": [
-			{
-				"channel": {"name": "latest/stable", "risk": "stable", "track": "latest", "platform": {"architecture": "arm64"}},
-				"revision": {"version": "8.0.0", "revision": 1, "download": {"url": "https://api.snapcraft.io/api/v1/bins/download/curl.bin", "sha3-384": "arm64hash", "size": 1024}}
-			},
-			{
-				"channel": {"name": "latest/stable", "risk": "stable", "track": "latest", "platform": {"architecture": "amd64"}},
-				"revision": {"version": "8.5.0", "revision": 42, "download": {"url": "https://api.snapcraft.io/api/v1/bins/download/curl.bin", "sha3-384": "amd64hash", "size": 1024}}
-			}
-		]
-	}`,
-	info: &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "amd64hash"},
-}, {
 	summary: "Missing download digest",
 	risk:    "stable",
 	status:  200,
-	body:    string(makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")),
+	body:    string(makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")),
 	error:   `bin "curl" has no download digest`,
 }}
 
@@ -282,11 +277,26 @@ func (s *storeSuite) TestInfo(c *C) {
 }
 
 func (s *storeSuite) TestInfoRequest(c *C) {
-	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		c.Assert(req.URL.Path, Equals, "/v2/bins/info/curl")
-		c.Assert(req.URL.Query().Get("fields"), Equals, "download,version,revision,channel-map")
+		c.Assert(req.Method, Equals, "POST")
+		c.Assert(req.URL.Path, Equals, "/v2/revisions/resolve")
+		c.Assert(req.Header.Get("Content-Type"), Equals, "application/json")
+		c.Assert(req.Header.Get("Accept"), Equals, "application/json")
+
+		var body map[string]any
+		err := json.NewDecoder(req.Body).Decode(&body)
+		c.Assert(err, IsNil)
+		pkgs := body["packages"].([]any)
+		c.Assert(pkgs, HasLen, 1)
+		pkg := pkgs[0].(map[string]any)
+		c.Assert(pkg["instance-key"], Equals, "curl")
+		c.Assert(pkg["namespace"], Equals, "bin")
+		c.Assert(pkg["name"], Equals, "curl")
+		c.Assert(pkg["channel"], Equals, "latest/stable")
+		c.Assert(pkg["platform"].(map[string]any)["architecture"], Equals, "amd64")
+
 		return &http.Response{
 			StatusCode: 200,
 			Body:       io.NopCloser(bytes.NewReader(infoBody)),
@@ -305,18 +315,30 @@ func (s *storeSuite) TestInfoRequest(c *C) {
 }
 
 func (s *storeSuite) TestExists(c *C) {
-	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+	okBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+	notFoundBody := makeResolveErrorBody("nonexistent", "package-not-found", "Package not found")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		if strings.Contains(req.URL.Path, "/info/curl") {
+		var body struct {
+			Packages []struct {
+				Name string `json:"name"`
+			} `json:"packages"`
+		}
+		err := json.NewDecoder(req.Body).Decode(&body)
+		c.Assert(err, IsNil)
+		pkgName := ""
+		if len(body.Packages) > 0 {
+			pkgName = body.Packages[0].Name
+		}
+		if pkgName == "curl" {
 			return &http.Response{
 				StatusCode: 200,
-				Body:       io.NopCloser(bytes.NewReader(infoBody)),
+				Body:       io.NopCloser(bytes.NewReader(okBody)),
 			}, nil
 		}
 		return &http.Response{
-			StatusCode: 404,
-			Body:       io.NopCloser(strings.NewReader("not found")),
+			StatusCode: 200,
+			Body:       io.NopCloser(bytes.NewReader(notFoundBody)),
 		}, nil
 	}
 
@@ -335,12 +357,12 @@ func (s *storeSuite) TestFetchCacheMiss(c *C) {
 	tarData := []byte("fake tar.xz content")
 	digest := sha384Hash(tarData)
 
-	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
+	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
 
 	callCount := 0
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		callCount++
-		if strings.Contains(req.URL.Path, "/info/") {
+		if req.URL.Path == "/v2/revisions/resolve" {
 			return &http.Response{
 				StatusCode: 200,
 				Body:       io.NopCloser(bytes.NewReader(infoBody)),
@@ -389,11 +411,11 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 	err := cc.Write(cache.SHA384, digest, tarData)
 	c.Assert(err, IsNil)
 
-	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
+	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
 
 	infoCallCount := 0
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		if strings.Contains(req.URL.Path, "/info/") {
+		if req.URL.Path == "/v2/revisions/resolve" {
 			infoCallCount++
 			return &http.Response{
 				StatusCode: 200,
@@ -425,7 +447,7 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 
 func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 	// Override the download URL to an invalid one.
-	infoBody := makeBinInfoBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123",
+	infoBody := makeResolveBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123",
 		"http://evil.example.com/bins/curl.tar.xz")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
@@ -448,7 +470,7 @@ func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 
 func (s *storeSuite) TestFetchMissingDigest(c *C) {
 	// The store omits the sha3-384 digest from the response.
-	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")
+	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -479,7 +501,7 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 	})
 	c.Assert(err, IsNil)
 
-	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		// Verify staging URL is used.
@@ -504,10 +526,10 @@ func (s *storeSuite) TestOpenUnsupportedKind(c *C) {
 }
 
 func (s *storeSuite) TestFetchDownloadError(c *C) {
-	infoBody := makeBinInfoBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		if strings.Contains(req.URL.Path, "/info/") {
+		if req.URL.Path == "/v2/revisions/resolve" {
 			return &http.Response{
 				StatusCode: 200,
 				Body:       io.NopCloser(bytes.NewReader(infoBody)),
