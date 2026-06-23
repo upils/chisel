@@ -30,11 +30,6 @@ func (s *TestStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *store.S
 	return ReadSeekNopCloser(bytes.NewReader(pkg.Data)), info, nil
 }
 
-func (s *TestStore) Exists(name, track, risk string) bool {
-	_, ok := s.Packages[name]
-	return ok
-}
-
 func (s *TestStore) Info(name, track, risk string) (*store.StorePackageInfo, error) {
 	pkg, ok := s.Packages[name]
 	if !ok {

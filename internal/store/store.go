@@ -20,7 +20,6 @@ import (
 type Store interface {
 	Options() *Options
 	Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error)
-	Exists(name, track, risk string) bool
 	Info(name, track, risk string) (*StorePackageInfo, error)
 }
 
@@ -188,6 +187,10 @@ func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, erro
 	}
 	defer resp.Body.Close()
 
+	// The resolve endpoint returns 200 for both success and per-package errors
+	// (e.g. package not found). Request-level errors (e.g. malformed channel)
+	// return 4xx. A simple status check is sufficient here because per-package
+	// errors are handled below via the result status field.
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("cannot fetch from store: %v", resp.Status)
 	}
@@ -218,9 +221,10 @@ func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, erro
 	return rev, nil
 }
 
-// nameExp matches a valid package name. It deliberately forbids "/" and any
-// leading "." so that a name cannot be used to traverse or otherwise alter the
-// store API URL path when interpolated into it.
+// nameExp matches a valid package name. It is used to validate the name
+// before sending it to the store API. Unlike other payload values (track,
+// risk, arch) which are validated upstream, the package name comes directly
+// from the release YAML without format validation.
 var nameExp = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
 
 // validateDownloadURL checks that the download URL is HTTPS and from the
@@ -234,7 +238,7 @@ func validateDownloadURL(downloadURL, allowedHost string) error {
 		return fmt.Errorf("download URL must use HTTPS: %q", downloadURL)
 	}
 	host := strings.ToLower(u.Hostname())
-	if host == allowedHost || strings.HasSuffix(host, "."+allowedHost) {
+	if host == allowedHost {
 		return nil
 	}
 	return fmt.Errorf("download URL has untrusted host %q", host)
@@ -258,11 +262,6 @@ func (s *binStore) Info(name, track, risk string) (*StorePackageInfo, error) {
 		Revision: rev.Revision,
 		SHA384:   rev.Download.SHA384,
 	}, nil
-}
-
-func (s *binStore) Exists(name, track, risk string) bool {
-	_, err := s.Info(name, track, risk)
-	return err == nil
 }
 
 func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error) {

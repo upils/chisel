@@ -311,45 +311,6 @@ func (s *storeSuite) TestInfoRequest(c *C) {
 	c.Assert(err, IsNil)
 }
 
-func (s *storeSuite) TestExists(c *C) {
-	okBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
-	notFoundBody := makeResolveErrorBody("nonexistent", "package-not-found", "Package not found")
-
-	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		var body struct {
-			Packages []struct {
-				Name string `json:"name"`
-			} `json:"packages"`
-		}
-		err := json.NewDecoder(req.Body).Decode(&body)
-		c.Assert(err, IsNil)
-		pkgName := ""
-		if len(body.Packages) > 0 {
-			pkgName = body.Packages[0].Name
-		}
-		if pkgName == "curl" {
-			return &http.Response{
-				StatusCode: 200,
-				Body:       io.NopCloser(bytes.NewReader(okBody)),
-			}, nil
-		}
-		return &http.Response{
-			StatusCode: 200,
-			Body:       io.NopCloser(bytes.NewReader(notFoundBody)),
-		}, nil
-	}
-
-	src, err := store.Open(&store.Options{
-		Arch:     "amd64",
-		CacheDir: s.cacheDir,
-		Kind:     "bin",
-	})
-	c.Assert(err, IsNil)
-
-	c.Assert(src.Exists("curl", "latest", "stable"), Equals, true)
-	c.Assert(src.Exists("nonexistent", "latest", "stable"), Equals, false)
-}
-
 func (s *storeSuite) TestFetchCacheMiss(c *C) {
 	tarData := []byte("fake tar.xz content")
 	digest := sha384Hash(tarData)
