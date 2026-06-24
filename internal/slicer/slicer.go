@@ -51,7 +51,7 @@ type pkgSourceInfo struct {
 	kind    sourceKind
 	archive archive.Archive
 	// TODO: add store handle when store support is implemented.
-	pkg     *setup.Package
+	pkg *setup.Package
 }
 
 type contentChecker struct {
@@ -541,8 +541,8 @@ func resolvePkgSources(archives map[string]archive.Archive, selection *setup.Sel
 		if pkg.Store != "" {
 			pkgSources[pkg.Name] = &pkgSourceInfo{
 				// TODO: Fill with the live store handle when store support is implemented.
-				kind:  sourceStore,
-				pkg:   pkg,
+				kind: sourceStore,
+				pkg:  pkg,
 			}
 			continue
 		}
