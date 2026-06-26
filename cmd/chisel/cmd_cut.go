@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -131,6 +132,11 @@ func (cmd *cmdCut) Execute(args []string) error {
 			Version:  storeInfo.Version,
 		})
 		if err != nil {
+			var unknownStoreKindError *store.UnknownStoreKindError
+			if errors.As(err, &unknownStoreKindError) {
+				logf("Store %q ignored: %v", storeName, err)
+				continue
+			}
 			return err
 		}
 		stores[storeName] = openStore
