@@ -71,6 +71,14 @@ var bulkClient = &http.Client{
 
 var bulkDo = bulkClient.Do
 
+type UnknownStoreKindError struct {
+	kind string
+}
+
+func (e *UnknownStoreKindError) Error() string {
+	return fmt.Sprintf("unsupported store kind %q", e.kind)
+}
+
 func Open(options *Options) (Store, error) {
 	var err error
 	if options.Arch == "" {
@@ -97,7 +105,7 @@ func Open(options *Options) (Store, error) {
 			downloadHost: downloadHost,
 		}, nil
 	default:
-		return nil, fmt.Errorf("unsupported store kind %q", options.Kind)
+		return nil, &UnknownStoreKindError{kind: options.Kind}
 	}
 }
 

@@ -174,11 +174,10 @@ func Run(options *RunOptions) error {
 		src := pkgSources[slice.Package]
 		var reader io.ReadSeekCloser
 		if src.kind == sourceStore {
-			// The package metadata returned by the store is not yet recorded
-			// in the manifest; this is handled in a subsequent change.
-			// Risk is left unspecified for now; the store applies its default.
 			// The store channel track is "<default-track>-<store version>",
 			// e.g. "3.1-26.10". The version pins the release series.
+			// Risk is left unspecified for now; the store applies its default.
+			// In the future the risk will optionnaly come from the CLI.
 			track := src.pkg.DefaultTrack + "-" + src.store.Options().Version
 			reader, _, err = src.store.Fetch(src.pkg.RealName, track, "")
 			if err != nil {
@@ -276,7 +275,7 @@ func Run(options *RunOptions) error {
 		src := pkgSources[slice.Package]
 		// Store packages are distributed as plain tarballs, whose extraction
 		// is not yet implemented. Fail until the format support is in place.
-		if src.kind == sourceStore {
+		if src.kind != sourceArchive {
 			return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", src.pkg.RealName)
 		}
 		err := deb.Extract(reader, &deb.ExtractOptions{
