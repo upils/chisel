@@ -32,7 +32,7 @@ func (s *storeSuite) SetUpTest(c *C) {
 	s.cacheDir = filepath.Join(s.tempDir, "cache")
 	c.Assert(os.MkdirAll(s.cacheDir, 0o755), IsNil)
 
-	s.envRestore = fakeEnv("")
+	s.envRestore = fakeEnv(store.BinStagingEnvVar, "")
 	s.restore = store.FakeDo(s.doRequest)
 	s.fakeDoFunc = nil
 }
@@ -49,18 +49,14 @@ func (s *storeSuite) doRequest(req *http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("unexpected HTTP request: %s", req.URL.String())
 }
 
-func fakeEnv(staging string) func() {
-	oldStaging := os.Getenv(store.BinStagingEnvVar)
-	if staging != "" {
-		os.Setenv(store.BinStagingEnvVar, staging)
-	} else {
-		os.Unsetenv(store.BinStagingEnvVar)
-	}
+func fakeEnv(name, value string) (restore func()) {
+	origValue, origSet := os.LookupEnv(name)
+	os.Setenv(name, value)
 	return func() {
-		if oldStaging != "" {
-			os.Setenv(store.BinStagingEnvVar, oldStaging)
+		if origSet {
+			os.Setenv(name, origValue)
 		} else {
-			os.Unsetenv(store.BinStagingEnvVar)
+			os.Unsetenv(name)
 		}
 	}
 }
@@ -121,34 +117,40 @@ func makeResolveErrorBody(name, code, message string) []byte {
 
 func (s *storeSuite) TestValidateDownloadURL(c *C) {
 	tests := []struct {
+		summary     string
 		url         string
 		allowedHost string
 		error       string
 	}{
-		{"https://api.snapcraft.io/api/v1/bins/download/foo.bin", "api.snapcraft.io", ""},
+		{"Valid production host", "https://api.snapcraft.io/api/v1/bins/download/foo.bin", "api.snapcraft.io", ""},
 		{
+			"HTTP rejected",
 			"http://api.snapcraft.io/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
 			`download URL must use HTTPS: "http://api.snapcraft.io/api/v1/bins/download/foo.bin"`,
 		},
 		{
+			"Untrusted host",
 			"https://evil.example.com/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
 			`download URL has untrusted host "evil.example.com"`,
 		},
 		{
+			"Untrusted host case-insensitive",
 			"https://Evil.Example.Com/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
 			`download URL has untrusted host "evil.example.com"`,
 		},
 		{
+			"Host suffix attack",
 			"https://api.snapcraft.io.evil.com/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
 			`download URL has untrusted host "api.snapcraft.io.evil.com"`,
 		},
-		{"://invalid-url", "api.snapcraft.io", `cannot parse download URL: .*`},
+		{"Invalid URL", "://invalid-url", "api.snapcraft.io", `cannot parse download URL: .*`},
 	}
 	for _, test := range tests {
+		c.Logf("Summary: %s", test.summary)
 		err := store.ValidateDownloadURL(test.url, test.allowedHost)
 		if test.error == "" {
 			c.Assert(err, IsNil)
@@ -160,14 +162,16 @@ func (s *storeSuite) TestValidateDownloadURL(c *C) {
 
 func (s *storeSuite) TestOpenArchValidation(c *C) {
 	tests := []struct {
-		arch  string
-		error string
+		summary string
+		arch    string
+		error   string
 	}{
-		{"amd64", ""},
-		{"arm64", ""},
-		{"invalid", "invalid package architecture: invalid"},
+		{"Valid amd64", "amd64", ""},
+		{"Valid arm64", "arm64", ""},
+		{"Invalid architecture", "invalid", "invalid package architecture: invalid"},
 	}
 	for _, test := range tests {
+		c.Logf("Summary: %s", test.summary)
 		_, err := store.Open(&store.Options{
 			Arch:     test.arch,
 			CacheDir: s.cacheDir,
@@ -263,7 +267,7 @@ func (s *storeSuite) TestFetch(c *C) {
 func (s *storeSuite) TestResolveRequest(c *C) {
 	tarData := []byte("fake tar.xz content")
 	digest := sha384Hash(tarData)
-	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
+	resolveBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path != "/v2/revisions/resolve" {
@@ -291,7 +295,7 @@ func (s *storeSuite) TestResolveRequest(c *C) {
 
 		return &http.Response{
 			StatusCode: 200,
-			Body:       io.NopCloser(bytes.NewReader(infoBody)),
+			Body:       io.NopCloser(bytes.NewReader(resolveBody)),
 		}, nil
 	}
 
@@ -310,7 +314,7 @@ func (s *storeSuite) TestFetchCacheMiss(c *C) {
 	tarData := []byte("fake tar.xz content")
 	digest := sha384Hash(tarData)
 
-	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
+	resolveBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
 
 	callCount := 0
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
@@ -318,7 +322,7 @@ func (s *storeSuite) TestFetchCacheMiss(c *C) {
 		if req.URL.Path == "/v2/revisions/resolve" {
 			return &http.Response{
 				StatusCode: 200,
-				Body:       io.NopCloser(bytes.NewReader(infoBody)),
+				Body:       io.NopCloser(bytes.NewReader(resolveBody)),
 			}, nil
 		}
 		// Download URL.
@@ -364,7 +368,7 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 	err := cc.Write(cache.SHA384, digest, tarData)
 	c.Assert(err, IsNil)
 
-	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
+	resolveBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
 
 	infoCallCount := 0
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
@@ -372,7 +376,7 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 			infoCallCount++
 			return &http.Response{
 				StatusCode: 200,
-				Body:       io.NopCloser(bytes.NewReader(infoBody)),
+				Body:       io.NopCloser(bytes.NewReader(resolveBody)),
 			}, nil
 		}
 		return nil, fmt.Errorf("download should not be called for cache hit")
@@ -400,13 +404,13 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 
 func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 	// Override the download URL to an invalid one.
-	infoBody := makeResolveBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123",
+	resolveBody := makeResolveBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123",
 		"http://evil.example.com/bins/curl.tar.xz")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: 200,
-			Body:       io.NopCloser(bytes.NewReader(infoBody)),
+			Body:       io.NopCloser(bytes.NewReader(resolveBody)),
 		}, nil
 	}
 
@@ -423,7 +427,7 @@ func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 
 func (s *storeSuite) TestStagingEnvVar(c *C) {
 	s.envRestore()
-	s.envRestore = fakeEnv("1")
+	s.envRestore = fakeEnv(store.BinStagingEnvVar, "1")
 
 	src, err := store.Open(&store.Options{
 		Arch:     "amd64",
@@ -434,7 +438,7 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 
 	tarData := []byte("fake tar.xz content")
 	digest := sha384Hash(tarData)
-	infoBody := makeResolveBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, digest,
+	resolveBody := makeResolveBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, digest,
 		"https://api.staging.snapcraft.io/api/v1/bins/download/curl.bin")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
@@ -443,7 +447,7 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 		if req.URL.Path == "/v2/revisions/resolve" {
 			return &http.Response{
 				StatusCode: 200,
-				Body:       io.NopCloser(bytes.NewReader(infoBody)),
+				Body:       io.NopCloser(bytes.NewReader(resolveBody)),
 			}, nil
 		}
 		return &http.Response{
@@ -466,13 +470,13 @@ func (s *storeSuite) TestOpenUnsupportedKind(c *C) {
 }
 
 func (s *storeSuite) TestFetchDownloadError(c *C) {
-	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+	resolveBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path == "/v2/revisions/resolve" {
 			return &http.Response{
 				StatusCode: 200,
-				Body:       io.NopCloser(bytes.NewReader(infoBody)),
+				Body:       io.NopCloser(bytes.NewReader(resolveBody)),
 			}, nil
 		}
 		return &http.Response{
