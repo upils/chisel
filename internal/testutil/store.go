@@ -29,15 +29,3 @@ func (s *TestStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *store.S
 	}
 	return ReadSeekNopCloser(bytes.NewReader(pkg.Data)), info, nil
 }
-
-func (s *TestStore) Info(name, track, risk string) (*store.StorePackageInfo, error) {
-	pkg, ok := s.Packages[name]
-	if !ok {
-		return nil, fmt.Errorf("cannot find package %q in store", name)
-	}
-	return &store.StorePackageInfo{
-		Name:    pkg.Name,
-		Version: pkg.Version,
-		SHA384:  pkg.Hash,
-	}, nil
-}
