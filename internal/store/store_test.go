@@ -326,7 +326,7 @@ func (s *storeSuite) TestFetchCacheMiss(c *C) {
 				Body:       io.NopCloser(bytes.NewReader(infoBody)),
 			}, nil
 		}
-		// Download URL
+		// Download URL.
 		return &http.Response{
 			StatusCode: 200,
 			Body:       io.NopCloser(bytes.NewReader(tarData)),

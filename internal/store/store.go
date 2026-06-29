@@ -71,6 +71,12 @@ var bulkClient = &http.Client{
 
 var bulkDo = bulkClient.Do
 
+// nameExp matches a valid package name. It is used to validate the name
+// before sending it to the store API. Unlike other payload values (track,
+// risk, arch) which are validated upstream, the package name comes directly
+// from the release YAML without format validation.
+var nameExp = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
+
 type UnknownStoreKindError struct {
 	kind string
 }
@@ -229,29 +235,6 @@ func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, erro
 	return rev, nil
 }
 
-// nameExp matches a valid package name. It is used to validate the name
-// before sending it to the store API. Unlike other payload values (track,
-// risk, arch) which are validated upstream, the package name comes directly
-// from the release YAML without format validation.
-var nameExp = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
-
-// validateDownloadURL checks that the download URL is HTTPS and from the
-// allowed host.
-func validateDownloadURL(downloadURL, allowedHost string) error {
-	u, err := url.Parse(downloadURL)
-	if err != nil {
-		return fmt.Errorf("cannot parse download URL: %v", err)
-	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("download URL must use HTTPS: %q", downloadURL)
-	}
-	host := strings.ToLower(u.Hostname())
-	if host == allowedHost {
-		return nil
-	}
-	return fmt.Errorf("download URL has untrusted host %q", host)
-}
-
 func (s *binStore) Options() *Options {
 	return &s.options
 }
@@ -337,4 +320,21 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePac
 		return nil, nil, err
 	}
 	return reader, info, nil
+}
+
+// validateDownloadURL checks that the download URL is HTTPS and from the
+// allowed host.
+func validateDownloadURL(downloadURL, allowedHost string) error {
+	u, err := url.Parse(downloadURL)
+	if err != nil {
+		return fmt.Errorf("cannot parse download URL: %v", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("download URL must use HTTPS: %q", downloadURL)
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == allowedHost {
+		return nil
+	}
+	return fmt.Errorf("download URL has untrusted host %q", host)
 }
