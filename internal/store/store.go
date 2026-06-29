@@ -20,7 +20,6 @@ import (
 type Store interface {
 	Options() *Options
 	Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error)
-	Info(name, track, risk string) (*StorePackageInfo, error)
 }
 
 // StorePackageInfo holds metadata about a package.
@@ -237,22 +236,6 @@ func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, erro
 
 func (s *binStore) Options() *Options {
 	return &s.options
-}
-
-func (s *binStore) Info(name, track, risk string) (*StorePackageInfo, error) {
-	if risk == "" {
-		risk = defaultRisk
-	}
-	rev, err := s.resolveRevision(name, track, risk)
-	if err != nil {
-		return nil, err
-	}
-	return &StorePackageInfo{
-		Name:     name,
-		Version:  rev.Version,
-		Revision: rev.Revision,
-		SHA384:   rev.Download.SHA384,
-	}, nil
 }
 
 func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *StorePackageInfo, error) {

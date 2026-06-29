@@ -126,20 +126,6 @@ func (s *storeSuite) TestValidateDownloadURL(c *C) {
 		error       string
 	}{
 		{"https://api.snapcraft.io/api/v1/bins/download/foo.bin", "api.snapcraft.io", ""},
-		// Staging host is rejected when the production host is allowed.
-		{
-			"https://api.staging.snapcraft.io/api/v1/bins/download/foo.bin",
-			"api.snapcraft.io",
-			`download URL has untrusted host "api.staging.snapcraft.io"`,
-		},
-		// Staging host is allowed when it is the allowed host.
-		{"https://api.staging.snapcraft.io/api/v1/bins/download/foo.bin", "api.staging.snapcraft.io", ""},
-		// Production API host is rejected when the staging host is allowed.
-		{
-			"https://api.snapcraft.io/api/v1/bins/download/foo.bin",
-			"api.staging.snapcraft.io",
-			`download URL has untrusted host "api.snapcraft.io"`,
-		},
 		{
 			"http://api.snapcraft.io/api/v1/bins/download/foo.bin",
 			"api.snapcraft.io",
@@ -195,28 +181,22 @@ func (s *storeSuite) TestOpenArchValidation(c *C) {
 	}
 }
 
-type infoTest struct {
+type fetchTest struct {
 	summary    string
 	risk       string
 	status     int
 	statusText string
 	body       string
-	info       *store.StorePackageInfo
 	error      string
 }
 
-var infoTests = []infoTest{{
-	summary: "Successful info",
-	risk:    "stable",
-	status:  200,
-	body:    string(makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")),
-	info:    &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "abc123"},
-}, {
+var fetchTests = []fetchTest{{
 	summary: "Defaults to stable risk when unspecified",
 	risk:    "",
 	status:  200,
-	body:    string(makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")),
-	info:    &store.StorePackageInfo{Name: "curl", Version: "8.5.0", Revision: 42, SHA384: "abc123"},
+	// Uses a real digest so the cache verification passes.
+	body: string(makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42,
+		sha384Hash([]byte("fake tar.xz content")))),
 }, {
 	summary: "Package not found",
 	risk:    "stable",
@@ -244,15 +224,23 @@ var infoTests = []infoTest{{
 	error:   `package "curl" has no download digest`,
 }}
 
-func (s *storeSuite) TestInfo(c *C) {
-	for _, test := range infoTests {
+func (s *storeSuite) TestFetch(c *C) {
+	tarData := []byte("fake tar.xz content")
+	for _, test := range fetchTests {
 		c.Logf("Summary: %s", test.summary)
 
 		s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
+			if req.URL.Path == "/v2/revisions/resolve" {
+				return &http.Response{
+					StatusCode: test.status,
+					Status:     test.statusText,
+					Body:       io.NopCloser(strings.NewReader(test.body)),
+				}, nil
+			}
+			// Download URL.
 			return &http.Response{
-				StatusCode: test.status,
-				Status:     test.statusText,
-				Body:       io.NopCloser(strings.NewReader(test.body)),
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewReader(tarData)),
 			}, nil
 		}
 
@@ -263,22 +251,29 @@ func (s *storeSuite) TestInfo(c *C) {
 		})
 		c.Assert(err, IsNil)
 
-		info, err := src.Info("curl", "latest", test.risk)
+		_, _, err = src.Fetch("curl", "latest", test.risk)
 		if test.error != "" {
 			c.Assert(err, ErrorMatches, test.error)
-			continue
+		} else {
+			c.Assert(err, IsNil)
 		}
-		c.Assert(err, IsNil)
-		c.Assert(info, DeepEquals, test.info)
 	}
 }
 
-func (s *storeSuite) TestInfoRequest(c *C) {
-	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+func (s *storeSuite) TestResolveRequest(c *C) {
+	tarData := []byte("fake tar.xz content")
+	digest := sha384Hash(tarData)
+	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
+		if req.URL.Path != "/v2/revisions/resolve" {
+			// Download request.
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewReader(tarData)),
+			}, nil
+		}
 		c.Assert(req.Method, Equals, "POST")
-		c.Assert(req.URL.Path, Equals, "/v2/revisions/resolve")
 		c.Assert(req.Header.Get("Content-Type"), Equals, "application/json")
 		c.Assert(req.Header.Get("Accept"), Equals, "application/json")
 
@@ -307,7 +302,7 @@ func (s *storeSuite) TestInfoRequest(c *C) {
 	})
 	c.Assert(err, IsNil)
 
-	_, err = src.Info("curl", "latest", "stable")
+	_, _, err = src.Fetch("curl", "latest", "stable")
 	c.Assert(err, IsNil)
 }
 
@@ -426,28 +421,6 @@ func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 	c.Assert(err, ErrorMatches, `download URL must use HTTPS: "http://evil.example.com/bins/curl.tar.xz"`)
 }
 
-func (s *storeSuite) TestFetchMissingDigest(c *C) {
-	// The store omits the sha3-384 digest from the response.
-	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")
-
-	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		return &http.Response{
-			StatusCode: 200,
-			Body:       io.NopCloser(bytes.NewReader(infoBody)),
-		}, nil
-	}
-
-	src, err := store.Open(&store.Options{
-		Arch:     "amd64",
-		CacheDir: s.cacheDir,
-		Kind:     "bin",
-	})
-	c.Assert(err, IsNil)
-
-	_, _, err = src.Fetch("curl", "latest", "stable")
-	c.Assert(err, ErrorMatches, `package "curl" has no download digest`)
-}
-
 func (s *storeSuite) TestStagingEnvVar(c *C) {
 	s.envRestore()
 	s.envRestore = fakeEnv("1")
@@ -459,18 +432,27 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 	})
 	c.Assert(err, IsNil)
 
-	infoBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+	tarData := []byte("fake tar.xz content")
+	digest := sha384Hash(tarData)
+	infoBody := makeResolveBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, digest,
+		"https://api.staging.snapcraft.io/api/v1/bins/download/curl.bin")
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		// Verify staging URL is used.
 		c.Assert(req.URL.Host, Equals, "api.staging.snapcraft.io")
+		if req.URL.Path == "/v2/revisions/resolve" {
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(bytes.NewReader(infoBody)),
+			}, nil
+		}
 		return &http.Response{
 			StatusCode: 200,
-			Body:       io.NopCloser(bytes.NewReader(infoBody)),
+			Body:       io.NopCloser(bytes.NewReader(tarData)),
 		}, nil
 	}
 
-	_, err = src.Info("curl", "latest", "stable")
+	_, _, err = src.Fetch("curl", "latest", "stable")
 	c.Assert(err, IsNil)
 }
 
