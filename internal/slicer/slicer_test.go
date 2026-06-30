@@ -1980,7 +1980,7 @@ var slicerTests = []slicerTest{{
 		"/dir/file": "file 0644 cc55e2ec {test-package_third}",
 	},
 }, {
-	summary: "Store package fails as it is not yet supported",
+	summary: "Store package extracts, manifest reports missing package",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"bin-store-pkg", "myslice"}},
 	arch:    "amd64",
 	pkgs: []*testutil.TestPackage{{
@@ -1989,7 +1989,11 @@ var slicerTests = []slicerTest{{
 	}, {
 		Name:  "store-pkg",
 		Store: "bin",
-		Data:  testutil.PackageData["test-package"],
+		Data: testutil.MustMakeBin([]testutil.TarEntry{
+			testutil.Dir(0o755, "./"),
+			testutil.Dir(0o755, "./dir/"),
+			testutil.Reg(0o644, "./dir/store-file", "store content"),
+		}),
 	}},
 	release: map[string]string{
 		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
@@ -2010,7 +2014,29 @@ var slicerTests = []slicerTest{{
 						/dir/store-file:
 		`,
 	},
-	error: `cannot extract package "store-pkg" from store: store packages are not yet supported`,
+	error: `internal error: invalid manifest: slice bin-store-pkg_myslice refers to missing package "bin-store-pkg"`,
+}, {
+	summary: "Store package with invalid (non-xz) data fails extraction",
+	slices:  []setup.SliceKey{{"bin-store-pkg", "myslice"}},
+	arch:    "amd64",
+	pkgs: []*testutil.TestPackage{{
+		Name:  "store-pkg",
+		Store: "bin",
+		Data:  []byte("this is not an xz archive"),
+	}},
+	release: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"slices/mydir/store-pkg.yaml": `
+			package: store-pkg
+			store: bin
+			default-track: 3.1
+			slices:
+				myslice:
+					contents:
+						/dir/store-file:
+		`,
+	},
+	error: `cannot extract from package "bin-store-pkg": xz: invalid header magic bytes`,
 }}
 
 func (s *S) TestRun(c *C) {
@@ -2150,6 +2176,7 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 				stores[name] = &testutil.TestStore{
 					Packages: pkgs,
 					Opts: store.Options{
+						Kind:    relStore.Kind,
 						Version: relStore.Version,
 					},
 				}
