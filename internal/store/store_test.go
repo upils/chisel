@@ -67,12 +67,21 @@ func sha384Hash(data []byte) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func makeResolveBody(name, track, risk, arch, version string, revision int, sha384 string) []byte {
-	downloadURL := "https://api.snapcraft.io/api/v1/bins/download/" + name + ".bin"
-	return makeResolveBodyWithURL(name, track, risk, arch, version, revision, sha384, downloadURL)
+type resolveBodyOptions struct {
+	name        string
+	track       string
+	risk        string
+	arch        string
+	version     string
+	revision    int
+	sha384      string
+	downloadURL string
 }
 
-func makeResolveBodyWithURL(name, track, risk, arch, version string, revision int, sha384, downloadURL string) []byte {
+func makeResolveBody(opts resolveBodyOptions) []byte {
+	if opts.downloadURL == "" {
+		opts.downloadURL = "https://api.snapcraft.io/api/v1/bins/download/" + opts.name + ".bin"
+	}
 	return []byte(fmt.Sprintf(`{
 		"craft-results": [],
 		"package-results": [
@@ -98,7 +107,7 @@ func makeResolveBodyWithURL(name, track, risk, arch, version string, revision in
 				}
 			}
 		]
-	}`, name, track+"/"+risk, risk, track, arch, version, revision, downloadURL, sha384))
+	}`, opts.name, opts.track+"/"+opts.risk, opts.risk, opts.track, opts.arch, opts.version, opts.revision, opts.downloadURL, opts.sha384))
 }
 
 func makeResolveErrorBody(name, code, message string) []byte {
@@ -202,8 +211,11 @@ var fetchTests = []fetchTest{{
 	risk:    "",
 	status:  200,
 	// Uses a real digest so the cache verification passes.
-	body: string(makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42,
-		sha384Hash([]byte("fake tar.xz content")))),
+	body: string(makeResolveBody(resolveBodyOptions{
+		name: "curl", track: "latest", risk: "stable", arch: "amd64",
+		version: "8.5.0", revision: 42,
+		sha384: sha384Hash([]byte("fake tar.xz content")),
+	})),
 }, {
 	summary: "Package not found",
 	risk:    "stable",
@@ -227,8 +239,11 @@ var fetchTests = []fetchTest{{
 	summary: "Missing download digest",
 	risk:    "stable",
 	status:  200,
-	body:    string(makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "")),
-	error:   `package "curl" has no download digest`,
+	body: string(makeResolveBody(resolveBodyOptions{
+		name: "curl", track: "latest", risk: "stable", arch: "amd64",
+		version: "8.5.0", revision: 42,
+	})),
+	error: `package "curl" has no download digest`,
 }}
 
 func (s *storeSuite) TestFetch(c *C) {
@@ -270,7 +285,10 @@ func (s *storeSuite) TestFetch(c *C) {
 func (s *storeSuite) TestResolveRequest(c *C) {
 	tarData := []byte("fake tar.xz content")
 	digest := sha384Hash(tarData)
-	resolveBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
+	resolveBody := makeResolveBody(resolveBodyOptions{
+		name: "curl", track: "latest", risk: "stable", arch: "amd64",
+		version: "8.5.0", revision: 42, sha384: digest,
+	})
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path != "/v2/revisions/resolve" {
@@ -317,7 +335,10 @@ func (s *storeSuite) TestFetchCacheMiss(c *C) {
 	tarData := []byte("fake tar.xz content")
 	digest := sha384Hash(tarData)
 
-	resolveBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
+	resolveBody := makeResolveBody(resolveBodyOptions{
+		name: "curl", track: "latest", risk: "stable", arch: "amd64",
+		version: "8.5.0", revision: 42, sha384: digest,
+	})
 
 	callCount := 0
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
@@ -371,12 +392,15 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 	err := cc.Write(cache.SHA384, digest, tarData)
 	c.Assert(err, IsNil)
 
-	resolveBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, digest)
+	resolveBody := makeResolveBody(resolveBodyOptions{
+		name: "curl", track: "latest", risk: "stable", arch: "amd64",
+		version: "8.5.0", revision: 42, sha384: digest,
+	})
 
-	infoCallCount := 0
+	resolveCallCount := 0
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path == "/v2/revisions/resolve" {
-			infoCallCount++
+			resolveCallCount++
 			return &http.Response{
 				StatusCode: 200,
 				Body:       io.NopCloser(bytes.NewReader(resolveBody)),
@@ -398,7 +422,7 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 
 	c.Assert(info.Name, Equals, "curl")
 	c.Assert(info.SHA384, Equals, digest)
-	c.Assert(infoCallCount, Equals, 1)
+	c.Assert(resolveCallCount, Equals, 1)
 
 	data, err := io.ReadAll(reader)
 	c.Assert(err, IsNil)
@@ -407,8 +431,12 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 
 func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 	// Override the download URL to an invalid one.
-	resolveBody := makeResolveBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123",
-		"http://evil.example.com/bins/curl.tar.xz")
+	resolveBody := makeResolveBody(resolveBodyOptions{
+		name: "curl", track: "latest", risk: "stable", arch: "amd64",
+		version: "8.5.0", revision: 42,
+		sha384:      sha384Hash([]byte("fake tar.xz content")),
+		downloadURL: "http://evil.example.com/bins/curl.tar.xz",
+	})
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		return &http.Response{
@@ -441,8 +469,11 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 
 	tarData := []byte("fake tar.xz content")
 	digest := sha384Hash(tarData)
-	resolveBody := makeResolveBodyWithURL("curl", "latest", "stable", "amd64", "8.5.0", 42, digest,
-		"https://api.staging.snapcraft.io/api/v1/bins/download/curl.bin")
+	resolveBody := makeResolveBody(resolveBodyOptions{
+		name: "curl", track: "latest", risk: "stable", arch: "amd64",
+		version: "8.5.0", revision: 42, sha384: digest,
+		downloadURL: "https://api.staging.snapcraft.io/api/v1/bins/download/curl.bin",
+	})
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		// Verify staging URL is used.
@@ -464,7 +495,11 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 }
 
 func (s *storeSuite) TestFetchDownloadError(c *C) {
-	resolveBody := makeResolveBody("curl", "latest", "stable", "amd64", "8.5.0", 42, "abc123")
+	resolveBody := makeResolveBody(resolveBodyOptions{
+		name: "curl", track: "latest", risk: "stable", arch: "amd64",
+		version: "8.5.0", revision: 42,
+		sha384: sha384Hash([]byte("fake tar.xz content")),
+	})
 
 	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
 		if req.URL.Path == "/v2/revisions/resolve" {
