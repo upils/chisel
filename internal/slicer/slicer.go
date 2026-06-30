@@ -21,6 +21,7 @@ import (
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/scripts"
 	"github.com/canonical/chisel/internal/setup"
+	"github.com/canonical/chisel/internal/store"
 )
 
 const manifestMode fs.FileMode = 0644
@@ -28,6 +29,7 @@ const manifestMode fs.FileMode = 0644
 type RunOptions struct {
 	Selection *setup.Selection
 	Archives  map[string]archive.Archive
+	Stores    map[string]store.Store
 	TargetDir string
 }
 
@@ -50,8 +52,8 @@ type pkgSourceInfo struct {
 	arch    string
 	kind    sourceKind
 	archive archive.Archive
-	// TODO: add store handle when store support is implemented.
-	pkg *setup.Package
+	store   store.Store
+	pkg     *setup.Package
 }
 
 type contentChecker struct {
@@ -107,7 +109,7 @@ func Run(options *RunOptions) error {
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
-	pkgSources, err := resolvePkgSources(options.Archives, options.Selection)
+	pkgSources, err := resolvePkgSources(options.Archives, options.Stores, options.Selection)
 	if err != nil {
 		return err
 	}
@@ -170,19 +172,27 @@ func Run(options *RunOptions) error {
 			continue
 		}
 		src := pkgSources[slice.Package]
-		// Store packages are distributed as "ar" archives, whose extraction is
-		// not yet implemented. Fail until store handling and the "ar" format
-		// support are in place.
+		var reader io.ReadSeekCloser
 		if src.kind == sourceStore {
-			return fmt.Errorf("cannot fetch package %q from store: store packages are not yet supported", src.pkg.Name)
-		}
-		reader, info, err := src.archive.Fetch(src.pkg.RealName)
-		if err != nil {
-			return err
+			// The store channel track is "<default-track>-<store version>",
+			// e.g. "3.1-26.10". The version pins the release series.
+			// Risk is left unspecified for now; the store applies its default.
+			// In the future the risk will optionnaly come from the CLI.
+			track := src.pkg.DefaultTrack + "-" + src.store.Options().Version
+			reader, _, err = src.store.Fetch(src.pkg.RealName, track, "")
+			if err != nil {
+				return err
+			}
+		} else {
+			var info *archive.PackageInfo
+			reader, info, err = src.archive.Fetch(src.pkg.RealName)
+			if err != nil {
+				return err
+			}
+			pkgInfos = append(pkgInfos, info)
 		}
 		defer reader.Close()
 		packages[slice.Package] = reader
-		pkgInfos = append(pkgInfos, info)
 	}
 
 	// When creating content, record if a path is known and whether they are
@@ -261,6 +271,12 @@ func Run(options *RunOptions) error {
 		reader := packages[slice.Package]
 		if reader == nil {
 			continue
+		}
+		src := pkgSources[slice.Package]
+		// Store packages are distributed as plain tarballs, whose extraction
+		// is not yet implemented. Fail until the format support is in place.
+		if src.kind != sourceArchive {
+			return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", src.pkg.RealName)
 		}
 		err := deb.Extract(reader, &deb.ExtractOptions{
 			Package:   slice.Package,
@@ -516,9 +532,9 @@ func createFile(targetDir, relPath string, pathInfo setup.PathInfo) (*fsutil.Ent
 // resolvePkgSources determines the source for each package in the selection.
 // For archive packages it selects the highest priority archive containing the
 // package unless a particular archive is pinned within the slice definition
-// file. For store packages it records the store reference. It returns a map
+// file. For store packages it records the opened store handle. It returns a map
 // of pkgSourceInfo indexed by package names.
-func resolvePkgSources(archives map[string]archive.Archive, selection *setup.Selection) (map[string]*pkgSourceInfo, error) {
+func resolvePkgSources(archives map[string]archive.Archive, stores map[string]store.Store, selection *setup.Selection) (map[string]*pkgSourceInfo, error) {
 	sortedArchives := make([]*setup.Archive, 0, len(selection.Release.Archives))
 	for _, archive := range selection.Release.Archives {
 		if archive.Priority < 0 {
@@ -539,10 +555,15 @@ func resolvePkgSources(archives map[string]archive.Archive, selection *setup.Sel
 		}
 		pkg := selection.Release.Packages[s.Package]
 		if pkg.Store != "" {
+			storeHandle := stores[pkg.Store]
+			if storeHandle == nil {
+				return nil, fmt.Errorf("internal error: no store handle for store %q", pkg.Store)
+			}
 			pkgSources[pkg.Name] = &pkgSourceInfo{
-				// TODO: Fill with the live store handle when store support is implemented.
-				kind: sourceStore,
-				pkg:  pkg,
+				arch:  storeHandle.Options().Arch,
+				kind:  sourceStore,
+				store: storeHandle,
+				pkg:   pkg,
 			}
 			continue
 		}
@@ -572,23 +593,6 @@ func resolvePkgSources(archives map[string]archive.Archive, selection *setup.Sel
 			kind:    sourceArchive,
 			archive: chosen,
 			pkg:     pkg,
-		}
-	}
-
-	// Until a store is implemented as a package source there is no proper way to
-	// determine the architecture for store packages.
-	// So relying on the fact that all packages in a selection share the same architecture,
-	// we can borrow it from any archive package that was already resolved.
-	var arch string
-	for _, src := range pkgSources {
-		if src.kind == sourceArchive {
-			arch = src.arch
-			break
-		}
-	}
-	for _, src := range pkgSources {
-		if src.kind == sourceStore {
-			src.arch = arch
 		}
 	}
 
