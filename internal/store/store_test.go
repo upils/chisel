@@ -160,23 +160,26 @@ func (s *storeSuite) TestValidateDownloadURL(c *C) {
 	}
 }
 
-func (s *storeSuite) TestOpenArchValidation(c *C) {
+func (s *storeSuite) TestOpenOptionErrors(c *C) {
 	tests := []struct {
 		summary string
-		arch    string
+		options store.Options
 		error   string
-	}{
-		{"Valid amd64", "amd64", ""},
-		{"Valid arm64", "arm64", ""},
-		{"Invalid architecture", "invalid", "invalid package architecture: invalid"},
-	}
+	}{{
+		summary: "Valid amd64",
+		options: store.Options{Arch: "amd64", CacheDir: s.cacheDir, Kind: "bin"},
+	}, {
+		summary: "Invalid architecture",
+		options: store.Options{Arch: "invalid", CacheDir: s.cacheDir, Kind: "bin"},
+		error:   "invalid package architecture: invalid",
+	}, {
+		summary: "Unsupported store kind",
+		options: store.Options{Arch: "amd64", CacheDir: s.cacheDir, Kind: "snap"},
+		error:   `unsupported store kind "snap"`,
+	}}
 	for _, test := range tests {
 		c.Logf("Summary: %s", test.summary)
-		_, err := store.Open(&store.Options{
-			Arch:     test.arch,
-			CacheDir: s.cacheDir,
-			Kind:     "bin",
-		})
+		_, err := store.Open(&test.options)
 		if test.error == "" {
 			c.Assert(err, IsNil)
 		} else {
@@ -458,15 +461,6 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 
 	_, _, err = src.Fetch("curl", "latest", "stable")
 	c.Assert(err, IsNil)
-}
-
-func (s *storeSuite) TestOpenUnsupportedKind(c *C) {
-	_, err := store.Open(&store.Options{
-		Arch:     "amd64",
-		CacheDir: s.cacheDir,
-		Kind:     "snap",
-	})
-	c.Assert(err, ErrorMatches, `unsupported store kind "snap"`)
 }
 
 func (s *storeSuite) TestFetchDownloadError(c *C) {
