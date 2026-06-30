@@ -16,6 +16,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/canonical/chisel/internal/archive"
+	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/scripts"
@@ -273,15 +274,22 @@ func Run(options *RunOptions) error {
 			continue
 		}
 		src := pkgSources[slice.Package]
-		// Store packages are distributed as plain tarballs, whose extraction
-		// is not yet implemented. Fail until the format support is in place.
-		if src.kind != sourceArchive {
-			return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", src.pkg.RealName)
+		var openData func(io.ReadSeeker) (io.ReadCloser, error)
+		if src.kind == sourceStore {
+			switch store.StoreKind(src.store.Options().Kind) {
+			case store.StoreKindBin:
+				openData = tarball.XZDataReader
+			default:
+				return fmt.Errorf("cannot extract from store of kind %q: unsupported artefact format", src.store.Options().Kind)
+			}
+		} else {
+			openData = deb.DataReader
 		}
 		err := tarball.Extract(reader, &tarball.ExtractOptions{
 			Package:   slice.Package,
 			Extract:   extract[slice.Package],
 			TargetDir: targetDir,
+			OpenData:  openData,
 			Create:    create,
 		})
 		reader.Close()

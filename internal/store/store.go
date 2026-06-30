@@ -37,9 +37,9 @@ type Options struct {
 	Version  string
 }
 
-type storeKind string
+type StoreKind string
 
-const storeKindBin storeKind = "bin"
+const StoreKindBin StoreKind = "bin"
 
 const defaultRisk = "stable"
 
@@ -95,8 +95,8 @@ func Open(options *Options) (Store, error) {
 		return nil, err
 	}
 
-	switch storeKind(options.Kind) {
-	case storeKindBin:
+	switch StoreKind(options.Kind) {
+	case StoreKindBin:
 		apiURL := binAPIBase
 		downloadHost := binDownloadHost
 		if os.Getenv(binStagingEnvVar) != "" {
@@ -177,7 +177,7 @@ func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, erro
 	reqBody, err := json.Marshal(resolveRequest{
 		Packages: []resolvePackage{{
 			InstanceKey: name,
-			Namespace:   string(storeKindBin),
+			Namespace:   string(StoreKindBin),
 			Name:        name,
 			Channel:     track + "/" + risk,
 			Platform:    binPlatform{Architecture: s.options.Arch},
