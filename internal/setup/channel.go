@@ -62,12 +62,28 @@ func parseChannel(channel string) (Channel, error) {
 	}
 	parsed := Channel{Track: segments[0]}
 	if len(segments) > 1 {
+		if err := validateRisk(segments[1]); err != nil {
+			return Channel{}, fmt.Errorf("channel has %s", err)
+		}
 		parsed.Risk = segments[1]
 	}
 	if len(segments) > 2 {
 		parsed.Branch = segments[2]
 	}
 	return parsed, nil
+}
+
+// knownRisks holds every risk a channel may hold, from the most to the least
+// stable. The set is defined by the store and does not depend on its content,
+// hence risks are validated as architectures are.
+var knownRisks = []string{"stable", "candidate", "beta", "edge"}
+
+// validateRisk validates a single risk of a channel or of a channel pattern.
+func validateRisk(risk string) error {
+	if !slices.Contains(knownRisks, risk) {
+		return fmt.Errorf("unknown risk %q, must be one of %s", risk, strings.Join(knownRisks, ", "))
+	}
+	return nil
 }
 
 // validateChannelPatterns validates the values of a "channel" field. A track
@@ -115,6 +131,9 @@ func validateChannelPattern(pattern string) (track string, err error) {
 		if except == "" {
 			return "", errors.New("must be <track>/<risk>")
 		}
+		if err := validateRisk(except); err != nil {
+			return "", err
+		}
 		return track, nil
 	}
 	for i, risk := range risks {
@@ -127,6 +146,9 @@ func validateChannelPattern(pattern string) (track string, err error) {
 		if slices.Contains(risks[:i], risk) {
 			return "", fmt.Errorf("risk %q is repeated", risk)
 		}
+		if err := validateRisk(risk); err != nil {
+			return "", err
+		}
 	}
 	return track, nil
 }
@@ -134,30 +156,37 @@ func validateChannelPattern(pattern string) (track string, err error) {
 // MatchChannelPatterns reports whether the concrete "<track>/<risk>" channel
 // matches any of the patterns. An empty list matches every channel, which means
 // the entry is not channel specific.
+//
+// A branch, as in "<track>/<risk>/<branch>", is ignored. Branches are ephemeral
+// and thus never part of a pattern, so an entry applies to every branch of the
+// risk it matches.
 func MatchChannelPatterns(patterns []string, channel string) bool {
 	if len(patterns) == 0 {
 		return true
 	}
+	track, risk, _ := strings.Cut(channel, "/")
+	risk, _, _ = strings.Cut(risk, "/")
+	if track == "" || risk == "" {
+		// A channel without a risk is not a channel. Never match it, rather
+		// than treat the missing risk as one that differs from an excluded one.
+		return false
+	}
 	for _, pattern := range patterns {
-		if matchChannel(pattern, channel) {
+		if matchChannel(pattern, track, risk) {
 			return true
 		}
 	}
 	return false
 }
 
-// matchChannel reports whether the pattern matches the concrete
-// "<track>/<risk>" channel. Note that the exclusion form is scoped to its own
-// track, so "1.0/!stable" does not match any risk of the "2.0" track.
+// matchChannel reports whether the pattern matches the track and the risk of a
+// concrete channel. Note that the exclusion form is scoped to its own track, so
+// "1.0/!stable" does not match any risk of the "2.0" track.
 //
 // The pattern is expected to be valid, as ensured when the release is read.
-func matchChannel(pattern, channel string) bool {
-	track, risk, _ := strings.Cut(channel, "/")
+func matchChannel(pattern, track, risk string) bool {
 	patternTrack, riskPart, _ := strings.Cut(pattern, "/")
-	if risk == "" || track != patternTrack {
-		// A channel without a risk is not a channel. Never match it, rather
-		// than treat the missing risk as one that differs from the excluded
-		// one.
+	if track != patternTrack {
 		return false
 	}
 	if riskPart == "*" {

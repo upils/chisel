@@ -75,18 +75,23 @@ type yamlPackage struct {
 }
 
 // hasChannel reports whether any path or essential of the package uses the
-// 'channel' field.
+// 'channel' field. Every flavour of essential is considered, including
+// 'v3-essential', as they all end up parsed the same way.
 func (yp *yamlPackage) hasChannel() bool {
-	for _, essential := range yp.Essential.Values {
-		if essential != nil && len(essential.Channel.List) > 0 {
-			return true
-		}
-	}
-	for _, slice := range yp.Slices {
-		for _, essential := range slice.Essential.Values {
+	essentialsHaveChannel := func(essentials map[string]*yamlEssential) bool {
+		for _, essential := range essentials {
 			if essential != nil && len(essential.Channel.List) > 0 {
 				return true
 			}
+		}
+		return false
+	}
+	if essentialsHaveChannel(yp.Essential.Values) || essentialsHaveChannel(yp.V3Essential) {
+		return true
+	}
+	for _, slice := range yp.Slices {
+		if essentialsHaveChannel(slice.Essential.Values) || essentialsHaveChannel(slice.V3Essential) {
+			return true
 		}
 		for _, path := range slice.Contents {
 			if path != nil && len(path.Channel.List) > 0 {

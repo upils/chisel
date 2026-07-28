@@ -23,6 +23,10 @@ var channelPatternTests = []struct {
 		"0.3/stable": true,
 		"0.3/edge":   false,
 		"0.2/stable": false,
+		// Branches are ephemeral, hence never part of a pattern. The entry
+		// applies to every branch of the risk it matches.
+		"0.3/stable/mybranch": true,
+		"0.3/edge/mybranch":   false,
 	},
 }, {
 	summary: "All risks of a track",
@@ -45,15 +49,17 @@ var channelPatternTests = []struct {
 		// A channel without a risk is not a channel, it must not match just
 		// because the missing risk differs from the excluded one.
 		"0.2": false,
+		// The branch is ignored, it must not be taken for part of the risk.
+		"0.2/stable/mybranch": false,
+		"0.2/edge/mybranch":   true,
 	},
 }, {
 	summary: "Channel without a risk never matches",
 	values:  []string{"0.3/*"},
 	match: map[string]bool{
-		"0.3":   false,
-		"0.3/":  false,
-		"":      false,
-		"0.3/*": true,
+		"0.3":  false,
+		"0.3/": false,
+		"":     false,
 	},
 }, {
 	summary: "Several risks",
@@ -72,9 +78,34 @@ var channelPatternTests = []struct {
 		"0.3/stable": true,
 	},
 }, {
-	summary: "Risks are free-form",
+	summary: "Every known risk",
+	values:  []string{"0.3/stable,candidate,beta,edge"},
+	match: map[string]bool{
+		"0.3/stable":    true,
+		"0.3/candidate": true,
+		"0.3/beta":      true,
+		"0.3/edge":      true,
+	},
+}, {
+	summary: "Unknown risk",
 	values:  []string{"0.3/whatever"},
-	match:   map[string]bool{"0.3/whatever": true},
+	err:     `"0.3/whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+}, {
+	summary: "Unknown risk in a list",
+	values:  []string{"0.3/edge,whatever"},
+	err:     `"0.3/edge,whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+}, {
+	summary: "Unknown excluded risk",
+	values:  []string{"0.3/!whatever"},
+	err:     `"0.3/!whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+}, {
+	summary: "Risks are case sensitive",
+	values:  []string{"0.3/Stable"},
+	err:     `"0.3/Stable": unknown risk "Stable", must be one of stable, candidate, beta, edge`,
+}, {
+	summary: "Risk holding a branch",
+	values:  []string{"0.3/stable/mybranch"},
+	err:     `"0.3/stable/mybranch": unknown risk "stable/mybranch", must be one of stable, candidate, beta, edge`,
 }, {
 	summary: "Missing risk",
 	values:  []string{"0.3"},

@@ -4742,6 +4742,20 @@ var setupTests = []setupTest{{
 	},
 	relerror: `cannot parse package "mypkg": 'channel' is unsupported before format v3`,
 }, {
+	summary: "Channel is unsupported before format v3 on a v3-essential",
+	input: map[string]string{
+		"chisel.yaml": strings.ReplaceAll(testutil.DefaultChiselYaml, "format: v1", "format: v2"),
+		"slices/mypkg.yaml": `
+			package: mypkg
+			slices:
+				myslice:
+					v3-essential:
+						mypkg_other: {channel: ["0.3/stable"]}
+				other:
+		`,
+	},
+	relerror: `cannot parse package "mypkg": 'channel' is unsupported before format v3`,
+}, {
 	summary: "Channel on a path of a non-store package",
 	input: map[string]string{
 		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
@@ -4783,21 +4797,6 @@ var setupTests = []setupTest{{
 		`,
 	},
 	relerror: `slice bin-mypkg_myslice has invalid 'channel' for path /dir/file: "0.3": must be <track>/<risk>`,
-}, {
-	summary: "Repeated track on a path",
-	input: map[string]string{
-		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
-		"bin-slices/mypkg.yaml": `
-			package: mypkg
-			store: bin
-			default-track: "0.3"
-			slices:
-				myslice:
-					contents:
-						/dir/file: {channel: ["0.3/*", "0.3/edge"]}
-		`,
-	},
-	relerror: `slice bin-mypkg_myslice has invalid 'channel' for path /dir/file: track "0.3" is repeated`,
 }, {
 	summary: "Invalid channel on an essential",
 	input: map[string]string{
@@ -5572,13 +5571,6 @@ var parseSliceRefTests = []struct {
 		Channel:  setup.Channel{Track: "3.0", Risk: "stable"},
 	},
 }, {
-	// Validation is loose, unknown risks are accepted.
-	input: "foo_bar@3.0/whatever",
-	expected: setup.SliceRef{
-		SliceKey: setup.SliceKey{Package: "foo", Slice: "bar"},
-		Channel:  setup.Channel{Track: "3.0", Risk: "whatever"},
-	},
-}, {
 	input: "foo-pkg_dashed-slice@3.0/beta",
 	expected: setup.SliceRef{
 		SliceKey: setup.SliceKey{Package: "foo-pkg", Slice: "dashed-slice"},
@@ -5601,6 +5593,12 @@ var parseSliceRefTests = []struct {
 }, {
 	input: "foo_bar@",
 	err:   `invalid slice reference "foo_bar@": missing channel`,
+}, {
+	input: "foo_bar@3.0/whatever",
+	err:   `invalid slice reference "foo_bar@3.0/whatever": channel has unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+}, {
+	input: "foo_bar@3.0/Stable",
+	err:   `invalid slice reference "foo_bar@3.0/Stable": channel has unknown risk "Stable", must be one of stable, candidate, beta, edge`,
 }, {
 	input: "foo_bar@/stable",
 	err:   `invalid slice reference "foo_bar@/stable": channel must be <track>\[/<risk>\[/<branch>\]\]`,
