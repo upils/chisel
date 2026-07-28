@@ -4579,7 +4579,426 @@ var setupTests = []setupTest{{
 		`,
 	},
 	selerror: `slice mypkg_myslice has channel but package "mypkg" is not in a store`,
+}, {
+	summary: "Channel on paths is parsed correctly",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/excluded: {channel: ["0.2/!stable"], arch: amd64}
+						/dir/listed: {channel: ["0.2/beta,edge"]}
+						/dir/scalar: {channel: 0.3/stable}
+						/dir/union: {channel: ["0.2/*", "0.3/edge"]}
+						/dir/wildcard*: {channel: ["0.3/*"]}
+		`,
+	},
+	release: &setup.Release{
+		Format: "v3",
+		Archives: map[string]*setup.Archive{
+			"ubuntu": {
+				Name:       "ubuntu",
+				Version:    "22.04",
+				Suites:     []string{"jammy"},
+				Components: []string{"main", "universe"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+				Maintained: true,
+			},
+		},
+		Stores: map[string]*setup.Store{
+			"bin": {
+				Name:          "bin",
+				Kind:          "bin",
+				Version:       "26.10",
+				DefaultPrefix: "bin-",
+			},
+		},
+		Maintenance: &setup.Maintenance{
+			Standard:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			EndOfLife: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC),
+		},
+		Packages: map[string]*setup.Package{
+			"bin-mypkg": {
+				RealName:     "mypkg",
+				Name:         "bin-mypkg",
+				Path:         "bin-slices/mypkg.yaml",
+				Store:        "bin",
+				DefaultTrack: "0.3",
+				Slices: map[string]*setup.Slice{
+					"myslice": {
+						Package: "bin-mypkg",
+						Name:    "myslice",
+						Contents: map[string]setup.PathInfo{
+							"/dir/excluded": {Kind: setup.CopyPath, Arch: []string{"amd64"},
+								Channel: mustParseChannels("0.2/!stable")},
+							"/dir/listed": {Kind: setup.CopyPath,
+								Channel: mustParseChannels("0.2/beta,edge")},
+							"/dir/scalar": {Kind: setup.CopyPath,
+								Channel: mustParseChannels("0.3/stable")},
+							"/dir/union": {Kind: setup.CopyPath,
+								Channel: mustParseChannels("0.2/*", "0.3/edge")},
+							"/dir/wildcard*": {Kind: setup.GlobPath,
+								Channel: mustParseChannels("0.3/*")},
+						},
+					},
+				},
+			},
+		},
+	},
+}, {
+	summary: "Channel on essentials is parsed correctly",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "0.3"
+			essential:
+				bin-mypkg_shared: {channel: ["0.3/*"]}
+			slices:
+				myslice:
+					essential:
+						bin-mypkg_extra: {channel: ["0.2/!stable"]}
+				shared:
+				extra:
+		`,
+	},
+	release: &setup.Release{
+		Format: "v3",
+		Archives: map[string]*setup.Archive{
+			"ubuntu": {
+				Name:       "ubuntu",
+				Version:    "22.04",
+				Suites:     []string{"jammy"},
+				Components: []string{"main", "universe"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+				Maintained: true,
+			},
+		},
+		Stores: map[string]*setup.Store{
+			"bin": {
+				Name:          "bin",
+				Kind:          "bin",
+				Version:       "26.10",
+				DefaultPrefix: "bin-",
+			},
+		},
+		Maintenance: &setup.Maintenance{
+			Standard:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			EndOfLife: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC),
+		},
+		Packages: map[string]*setup.Package{
+			"bin-mypkg": {
+				RealName:     "mypkg",
+				Name:         "bin-mypkg",
+				Path:         "bin-slices/mypkg.yaml",
+				Store:        "bin",
+				DefaultTrack: "0.3",
+				Slices: map[string]*setup.Slice{
+					"myslice": {
+						Package: "bin-mypkg",
+						Name:    "myslice",
+						Essential: map[setup.SliceKey]setup.EssentialInfo{
+							{Package: "bin-mypkg", Slice: "shared"}: {
+								Channel: mustParseChannels("0.3/*"),
+							},
+							{Package: "bin-mypkg", Slice: "extra"}: {
+								Channel: mustParseChannels("0.2/!stable"),
+							},
+						},
+					},
+					"shared": {
+						Package: "bin-mypkg",
+						Name:    "shared",
+					},
+					"extra": {
+						Package: "bin-mypkg",
+						Name:    "extra",
+						Essential: map[setup.SliceKey]setup.EssentialInfo{
+							{Package: "bin-mypkg", Slice: "shared"}: {
+								Channel: mustParseChannels("0.3/*"),
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+}, {
+	summary: "Channel is unsupported before format v3",
+	input: map[string]string{
+		"chisel.yaml": strings.ReplaceAll(testutil.DefaultChiselYaml, "format: v1", "format: v2"),
+		"slices/mypkg.yaml": `
+			package: mypkg
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: ["0.3/stable"]}
+		`,
+	},
+	relerror: `cannot parse package "mypkg": 'channel' is unsupported before format v3`,
+}, {
+	summary: "Channel on a path of a non-store package",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"slices/mypkg.yaml": `
+			package: mypkg
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: ["0.3/stable"]}
+		`,
+	},
+	relerror: `slice mypkg_myslice has 'channel' for path /dir/file but package is not in a store`,
+}, {
+	summary: "Channel on an essential of a non-store package",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"slices/mypkg.yaml": `
+			package: mypkg
+			slices:
+				myslice:
+					essential:
+						mypkg_other: {channel: ["0.3/stable"]}
+				other:
+		`,
+	},
+	relerror: `slice mypkg_myslice has 'channel' for essential mypkg_other but package is not in a store`,
+}, {
+	summary: "Invalid channel on a path",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: ["0.3"]}
+		`,
+	},
+	relerror: `slice bin-mypkg_myslice has invalid 'channel' for path /dir/file: "0.3": must be <track>/<risk>`,
+}, {
+	summary: "Repeated track on a path",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: ["0.3/*", "0.3/edge"]}
+		`,
+	},
+	relerror: `slice bin-mypkg_myslice has invalid 'channel' for path /dir/file: track "0.3" is repeated`,
+}, {
+	summary: "Invalid channel on an essential",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					essential:
+						bin-mypkg_other: {channel: ["*/stable"]}
+				other:
+		`,
+	},
+	relerror: `slice bin-mypkg_myslice has invalid 'channel' for essential bin-mypkg_other: "\*/stable": only the risk accepts '\*', '!' and ','`,
+}, {
+	summary: "Channel is accepted on generate paths, as 'arch' is",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/**: {generate: manifest, channel: ["0.3/*"]}
+		`,
+	},
+	release: &setup.Release{
+		Format: "v3",
+		Archives: map[string]*setup.Archive{
+			"ubuntu": {
+				Name:       "ubuntu",
+				Version:    "22.04",
+				Suites:     []string{"jammy"},
+				Components: []string{"main", "universe"},
+				PubKeys:    []*packet.PublicKey{testKey.PubKey},
+				Maintained: true,
+			},
+		},
+		Stores: map[string]*setup.Store{
+			"bin": {
+				Name:          "bin",
+				Kind:          "bin",
+				Version:       "26.10",
+				DefaultPrefix: "bin-",
+			},
+		},
+		Maintenance: &setup.Maintenance{
+			Standard:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
+			EndOfLife: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC),
+		},
+		Packages: map[string]*setup.Package{
+			"bin-mypkg": {
+				RealName:     "mypkg",
+				Name:         "bin-mypkg",
+				Path:         "bin-slices/mypkg.yaml",
+				Store:        "bin",
+				DefaultTrack: "0.3",
+				Slices: map[string]*setup.Slice{
+					"myslice": {
+						Package: "bin-mypkg",
+						Name:    "myslice",
+						Contents: map[string]setup.PathInfo{
+							"/dir/**": {
+								Kind:     setup.GeneratePath,
+								Generate: setup.GenerateManifest,
+								Channel:  mustParseChannels("0.3/*"),
+							},
+						},
+					},
+				},
+			},
+		},
+	},
+}, {
+	summary: "Channel-disjoint paths of different packages still conflict",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg1.yaml": `
+			package: mypkg1
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: ["0.3/stable"]}
+		`,
+		"bin-slices/mypkg2.yaml": `
+			package: mypkg2
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					contents:
+						/dir/file: {channel: ["0.2/edge"]}
+		`,
+	},
+	relerror: `slices bin-mypkg1_myslice and bin-mypkg2_myslice conflict on /dir/file`,
+}, {
+	summary: "Essential gated by a matching channel is selected",
+	selrefs: []setup.SliceRef{{
+		Key:     setup.SliceKey{Package: "bin-mypkg", Slice: "myslice"},
+		Channel: "0.3/edge",
+	}},
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					essential:
+						bin-mypkg_other: {channel: ["0.3/!stable"]}
+				other:
+					contents:
+						/dir/other: {}
+		`,
+	},
+	selection: &setup.Selection{
+		Slices: []*setup.Slice{{
+			Package: "bin-mypkg",
+			Name:    "other",
+			Contents: map[string]setup.PathInfo{
+				"/dir/other": {Kind: setup.CopyPath},
+			},
+		}, {
+			Package: "bin-mypkg",
+			Name:    "myslice",
+			Essential: map[setup.SliceKey]setup.EssentialInfo{
+				{Package: "bin-mypkg", Slice: "other"}: {
+					Channel: mustParseChannels("0.3/!stable"),
+				},
+			},
+		}},
+		Channels: map[string]string{"bin-mypkg": "0.3/edge"},
+	},
+}, {
+	summary: "Essential gated by a non-matching channel is skipped",
+	selrefs: []setup.SliceRef{{
+		Key: setup.SliceKey{Package: "bin-mypkg", Slice: "myslice"},
+	}},
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					essential:
+						bin-mypkg_other: {channel: ["0.3/!stable"]}
+				other:
+					contents:
+						/dir/other: {}
+		`,
+	},
+	selection: &setup.Selection{
+		Slices: []*setup.Slice{{
+			Package: "bin-mypkg",
+			Name:    "myslice",
+			Essential: map[setup.SliceKey]setup.EssentialInfo{
+				{Package: "bin-mypkg", Slice: "other"}: {
+					Channel: mustParseChannels("0.3/!stable"),
+				},
+			},
+		}},
+		Channels: map[string]string{"bin-mypkg": "0.3/stable"},
+	},
+}, {
+	summary: "Channel-gated essential loops are still detected",
+	input: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"bin-slices/mypkg.yaml": `
+			package: mypkg
+			store: bin
+			default-track: "0.3"
+			slices:
+				myslice:
+					essential:
+						bin-mypkg_other: {channel: ["0.2/*"]}
+				other:
+					essential:
+						bin-mypkg_myslice: {channel: ["0.3/*"]}
+		`,
+	},
+	relerror: `essential loop detected: bin-mypkg_myslice, bin-mypkg_other`,
 }}
+
+// mustParseChannels parses channel filter values for the test tables. It panics
+// on invalid values, which are covered by TestChannelFilters instead.
+func mustParseChannels(values ...string) []setup.ChannelFilter {
+	filters, err := setup.ParseChannelFilters(values)
+	if err != nil {
+		panic(err)
+	}
+	return filters
+}
 
 func (s *S) TestParseRelease(c *C) {
 	// Run tests for "archives" field in "v1" format.
@@ -4971,6 +5390,46 @@ func (s *S) TestPackageYAMLFormat(c *C) {
 					myslice:
 						contents:
 							/usr/bin/mypkg: {}
+			`,
+		},
+	}, {
+		summary: "All channel forms",
+		input: map[string]string{
+			"chisel.yaml": strings.ReplaceAll(testutil.DefaultChiselYamlWithStores, "format: v3", "format: v4"),
+			"slices/mypkg.yaml": `
+				package: mypkg
+				store: bin
+				default-track: "0.3"
+				slices:
+					myslice:
+						essential:
+							bin-mypkg_other: {channel: 0.3/*}
+						contents:
+							/dir/excluded: {channel: 0.2/!stable}
+							/dir/listed: {channel: '0.2/beta,edge'}
+							/dir/precise: {channel: 0.3/stable}
+							/dir/union: {channel: [0.2/*, 0.3/edge]}
+					other: {}
+			`,
+		},
+		expected: map[string]string{
+			"chisel.yaml": strings.ReplaceAll(testutil.DefaultChiselYamlWithStores, "format: v3", "format: v4"),
+			// A single value collapses back to a scalar, as with 'arch'. Values
+			// holding a comma must be quoted to survive the flow style.
+			"slices/mypkg.yaml": `
+				package: mypkg
+				store: bin
+				default-track: "0.3"
+				slices:
+					myslice:
+						essential:
+							bin-mypkg_other: {channel: 0.3/*}
+						contents:
+							/dir/excluded: {channel: 0.2/!stable}
+							/dir/listed: {channel: '0.2/beta,edge'}
+							/dir/precise: {channel: 0.3/stable}
+							/dir/union: {channel: [0.2/*, 0.3/edge]}
+					other: {}
 			`,
 		},
 	}}

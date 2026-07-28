@@ -74,6 +74,29 @@ type yamlPackage struct {
 	V3Essential map[string]*yamlEssential `yaml:"v3-essential,omitempty"`
 }
 
+// hasChannel reports whether any path or essential of the package uses the
+// 'channel' field.
+func (yp *yamlPackage) hasChannel() bool {
+	for _, essential := range yp.Essential.Values {
+		if essential != nil && len(essential.Channel.List) > 0 {
+			return true
+		}
+	}
+	for _, slice := range yp.Slices {
+		for _, essential := range slice.Essential.Values {
+			if essential != nil && len(essential.Channel.List) > 0 {
+				return true
+			}
+		}
+		for _, path := range slice.Contents {
+			if path != nil && len(path.Channel.List) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 type essentialStyle int
 
 const (
@@ -139,6 +162,7 @@ type yamlPath struct {
 	Mutable  bool         `yaml:"mutable,omitempty"`
 	Until    PathUntil    `yaml:"until,omitempty"`
 	Arch     yamlArch     `yaml:"arch,omitempty"`
+	Channel  yamlChannel  `yaml:"channel,omitempty"`
 	Generate GenerateKind `yaml:"generate,omitempty"`
 	Prefer   string       `yaml:"prefer,omitempty"`
 }
@@ -197,6 +221,33 @@ func (ya yamlArch) MarshalYAML() (any, error) {
 
 var _ yaml.Marshaler = yamlArch{}
 
+type yamlChannel struct {
+	List []string
+}
+
+func (yc *yamlChannel) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	var l []string
+	if value.Decode(&s) == nil {
+		yc.List = []string{s}
+	} else if value.Decode(&l) == nil {
+		yc.List = l
+	} else {
+		return fmt.Errorf("cannot decode channel")
+	}
+	// Validate channel correctness later for a better error message.
+	return nil
+}
+
+func (yc yamlChannel) MarshalYAML() (any, error) {
+	if len(yc.List) == 1 {
+		return yc.List[0], nil
+	}
+	return yc.List, nil
+}
+
+var _ yaml.Marshaler = yamlChannel{}
+
 type yamlMode uint
 
 func (ym yamlMode) MarshalYAML() (any, error) {
@@ -232,7 +283,8 @@ type yamlPubKey struct {
 }
 
 type yamlEssential struct {
-	Arch yamlArch `yaml:"arch,omitempty"`
+	Arch    yamlArch    `yaml:"arch,omitempty"`
+	Channel yamlChannel `yaml:"channel,omitempty"`
 }
 
 func (ye *yamlEssential) MarshalYAML() (any, error) {
@@ -519,6 +571,9 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 	}
 
 	if release.Format == "v1" || release.Format == "v2" {
+		if yamlPkg.hasChannel() {
+			return nil, fmt.Errorf("cannot parse package %q: 'channel' is unsupported before format v3", pkg.Name)
+		}
 		if yamlPkg.Essential.style != unsetEssential && yamlPkg.Essential.style != listEssential {
 			return nil, fmt.Errorf("cannot parse package %q: essential expects a list", pkg.Name)
 		}
@@ -588,6 +643,7 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 			var mutable bool
 			var until PathUntil
 			var arch []string
+			var channel []ChannelFilter
 			var generate GenerateKind
 			var prefer string
 			if yamlPath != nil && yamlPath.Generate != "" {
@@ -649,6 +705,15 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 						return nil, fmt.Errorf("slice %s_%s has invalid 'arch' for path %s: %q", pkg.Name, sliceName, contPath, s)
 					}
 				}
+				if len(yamlPath.Channel.List) > 0 {
+					if pkg.Store == "" {
+						return nil, fmt.Errorf("slice %s_%s has 'channel' for path %s but package is not in a store", pkg.Name, sliceName, contPath)
+					}
+					channel, err = ParseChannelFilters(yamlPath.Channel.List)
+					if err != nil {
+						return nil, fmt.Errorf("slice %s_%s has invalid 'channel' for path %s: %s", pkg.Name, sliceName, contPath, err)
+					}
+				}
 			}
 			if prefer == pkg.Name {
 				return nil, fmt.Errorf("slice %s_%s cannot 'prefer' its own package for path %s", pkg.Name, sliceName, contPath)
@@ -673,6 +738,7 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 				Mutable:  mutable,
 				Until:    until,
 				Arch:     arch,
+				Channel:  channel,
 				Generate: generate,
 				Prefer:   prefer,
 			}
@@ -700,6 +766,19 @@ func validateGeneratePath(path string) (string, error) {
 	return dirPath, nil
 }
 
+// channelFiltersToYAML renders channel filters back to their canonical string
+// form, as found in slice definition files.
+func channelFiltersToYAML(filters []ChannelFilter) []string {
+	if len(filters) == 0 {
+		return nil
+	}
+	values := make([]string, len(filters))
+	for i, filter := range filters {
+		values[i] = filter.String()
+	}
+	return values
+}
+
 // pathInfoToYAML converts a PathInfo object to a yamlPath object.
 // The returned object takes pointers to the given PathInfo object.
 func pathInfoToYAML(pi *PathInfo) (*yamlPath, error) {
@@ -708,6 +787,7 @@ func pathInfoToYAML(pi *PathInfo) (*yamlPath, error) {
 		Mutable:  pi.Mutable,
 		Until:    pi.Until,
 		Arch:     yamlArch{List: pi.Arch},
+		Channel:  yamlChannel{List: channelFiltersToYAML(pi.Channel)},
 		Generate: pi.Generate,
 		Prefer:   pi.Prefer,
 	}
@@ -739,7 +819,10 @@ func sliceToYAML(s *Slice) (*yamlSlice, error) {
 		},
 	}
 	for key, info := range s.Essential {
-		slice.Essential.Values[key.String()] = &yamlEssential{Arch: yamlArch{info.Arch}}
+		slice.Essential.Values[key.String()] = &yamlEssential{
+			Arch:    yamlArch{info.Arch},
+			Channel: yamlChannel{List: channelFiltersToYAML(info.Channel)},
+		}
 	}
 	for path, info := range s.Contents {
 		yamlPath, err := pathInfoToYAML(&info)
@@ -862,6 +945,21 @@ var defaultMaintenance = map[string]Maintenance{
 // processes them to check they are valid and not duplicated and, if
 // successful, adds them to slice.
 func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string, slice *Slice) error {
+	// parseChannels validates the 'channel' field of an essential entry. The
+	// filters apply to the channel of the package holding the essential.
+	parseChannels := func(refName string, essentialInfo *yamlEssential) ([]ChannelFilter, error) {
+		if essentialInfo == nil || len(essentialInfo.Channel.List) == 0 {
+			return nil, nil
+		}
+		if yamlPkg.Store == "" {
+			return nil, fmt.Errorf("slice %s has 'channel' for essential %s but package is not in a store", slice, refName)
+		}
+		filters, err := ParseChannelFilters(essentialInfo.Channel.List)
+		if err != nil {
+			return nil, fmt.Errorf("slice %s has invalid 'channel' for essential %s: %s", slice, refName, err)
+		}
+		return filters, nil
+	}
 	addPackageEssential := func(refName string, essentialInfo *yamlEssential) error {
 		sliceKey, err := ParseSliceKey(refName)
 		if err != nil {
@@ -881,7 +979,11 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 		if essentialInfo != nil {
 			archList = essentialInfo.Arch.List
 		}
-		slice.Essential[sliceKey] = EssentialInfo{Arch: archList}
+		channel, err := parseChannels(refName, essentialInfo)
+		if err != nil {
+			return err
+		}
+		slice.Essential[sliceKey] = EssentialInfo{Arch: archList, Channel: channel}
 		return nil
 	}
 	addSliceEssential := func(refName string, essentialInfo *yamlEssential) error {
@@ -902,7 +1004,11 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 		if essentialInfo != nil {
 			archList = essentialInfo.Arch.List
 		}
-		slice.Essential[sliceKey] = EssentialInfo{Arch: archList}
+		channel, err := parseChannels(refName, essentialInfo)
+		if err != nil {
+			return err
+		}
+		slice.Essential[sliceKey] = EssentialInfo{Arch: archList, Channel: channel}
 		return nil
 	}
 
