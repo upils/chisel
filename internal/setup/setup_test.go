@@ -4634,15 +4634,15 @@ var setupTests = []setupTest{{
 						Name:    "myslice",
 						Contents: map[string]setup.PathInfo{
 							"/dir/excluded": {Kind: setup.CopyPath, Arch: []string{"amd64"},
-								Channel: mustParseChannels("0.2/!stable")},
+								Channel: []string{"0.2/!stable"}},
 							"/dir/listed": {Kind: setup.CopyPath,
-								Channel: mustParseChannels("0.2/beta,edge")},
+								Channel: []string{"0.2/beta,edge"}},
 							"/dir/scalar": {Kind: setup.CopyPath,
-								Channel: mustParseChannels("0.3/stable")},
+								Channel: []string{"0.3/stable"}},
 							"/dir/union": {Kind: setup.CopyPath,
-								Channel: mustParseChannels("0.2/*", "0.3/edge")},
+								Channel: []string{"0.2/*", "0.3/edge"}},
 							"/dir/wildcard*": {Kind: setup.GlobPath,
-								Channel: mustParseChannels("0.3/*")},
+								Channel: []string{"0.3/*"}},
 						},
 					},
 				},
@@ -4704,10 +4704,10 @@ var setupTests = []setupTest{{
 						Name:    "myslice",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
 							{Package: "bin-mypkg", Slice: "shared"}: {
-								Channel: mustParseChannels("0.3/*"),
+								Channel: []string{"0.3/*"},
 							},
 							{Package: "bin-mypkg", Slice: "extra"}: {
-								Channel: mustParseChannels("0.2/!stable"),
+								Channel: []string{"0.2/!stable"},
 							},
 						},
 					},
@@ -4720,7 +4720,7 @@ var setupTests = []setupTest{{
 						Name:    "extra",
 						Essential: map[setup.SliceKey]setup.EssentialInfo{
 							{Package: "bin-mypkg", Slice: "shared"}: {
-								Channel: mustParseChannels("0.3/*"),
+								Channel: []string{"0.3/*"},
 							},
 						},
 					},
@@ -4867,7 +4867,7 @@ var setupTests = []setupTest{{
 							"/dir/**": {
 								Kind:     setup.GeneratePath,
 								Generate: setup.GenerateManifest,
-								Channel:  mustParseChannels("0.3/*"),
+								Channel:  []string{"0.3/*"},
 							},
 						},
 					},
@@ -4932,7 +4932,7 @@ var setupTests = []setupTest{{
 			Name:    "myslice",
 			Essential: map[setup.SliceKey]setup.EssentialInfo{
 				{Package: "bin-mypkg", Slice: "other"}: {
-					Channel: mustParseChannels("0.3/!stable"),
+					Channel: []string{"0.3/!stable"},
 				},
 			},
 		}},
@@ -4964,7 +4964,7 @@ var setupTests = []setupTest{{
 			Name:    "myslice",
 			Essential: map[setup.SliceKey]setup.EssentialInfo{
 				{Package: "bin-mypkg", Slice: "other"}: {
-					Channel: mustParseChannels("0.3/!stable"),
+					Channel: []string{"0.3/!stable"},
 				},
 			},
 		}},
@@ -4989,16 +4989,6 @@ var setupTests = []setupTest{{
 	},
 	relerror: `essential loop detected: bin-mypkg_myslice, bin-mypkg_other`,
 }}
-
-// mustParseChannels parses channel filter values for the test tables. It panics
-// on invalid values, which are covered by TestChannelFilters instead.
-func mustParseChannels(values ...string) []setup.ChannelFilter {
-	filters, err := setup.ParseChannelFilters(values)
-	if err != nil {
-		panic(err)
-	}
-	return filters
-}
 
 func (s *S) TestParseRelease(c *C) {
 	// Run tests for "archives" field in "v1" format.

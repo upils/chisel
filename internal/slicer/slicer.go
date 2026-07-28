@@ -117,7 +117,7 @@ func Run(options *RunOptions) error {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
 				continue
 			}
-			if !setup.MatchChannelFilters(pathInfo.Channel, channel) {
+			if !setup.MatchChannelPatterns(pathInfo.Channel, channel) {
 				continue
 			}
 			if preferredPkg, ok := prefers[targetPath]; ok && preferredPkg.Name != slice.Package {
@@ -280,7 +280,7 @@ func Run(options *RunOptions) error {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
 				continue
 			}
-			if !setup.MatchChannelFilters(pathInfo.Channel, channel) {
+			if !setup.MatchChannelPatterns(pathInfo.Channel, channel) {
 				continue
 			}
 			if pathInfo.Kind == setup.CopyPath || pathInfo.Kind == setup.GlobPath ||

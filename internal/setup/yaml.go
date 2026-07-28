@@ -643,7 +643,7 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 			var mutable bool
 			var until PathUntil
 			var arch []string
-			var channel []ChannelFilter
+			var channel []string
 			var generate GenerateKind
 			var prefer string
 			if yamlPath != nil && yamlPath.Generate != "" {
@@ -709,10 +709,10 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 					if pkg.Store == "" {
 						return nil, fmt.Errorf("slice %s_%s has 'channel' for path %s but package is not in a store", pkg.Name, sliceName, contPath)
 					}
-					channel, err = ParseChannelFilters(yamlPath.Channel.List)
-					if err != nil {
+					if err := validateChannelPatterns(yamlPath.Channel.List); err != nil {
 						return nil, fmt.Errorf("slice %s_%s has invalid 'channel' for path %s: %s", pkg.Name, sliceName, contPath, err)
 					}
+					channel = yamlPath.Channel.List
 				}
 			}
 			if prefer == pkg.Name {
@@ -766,19 +766,6 @@ func validateGeneratePath(path string) (string, error) {
 	return dirPath, nil
 }
 
-// channelFiltersToYAML renders channel filters back to their canonical string
-// form, as found in slice definition files.
-func channelFiltersToYAML(filters []ChannelFilter) []string {
-	if len(filters) == 0 {
-		return nil
-	}
-	values := make([]string, len(filters))
-	for i, filter := range filters {
-		values[i] = filter.String()
-	}
-	return values
-}
-
 // pathInfoToYAML converts a PathInfo object to a yamlPath object.
 // The returned object takes pointers to the given PathInfo object.
 func pathInfoToYAML(pi *PathInfo) (*yamlPath, error) {
@@ -787,7 +774,7 @@ func pathInfoToYAML(pi *PathInfo) (*yamlPath, error) {
 		Mutable:  pi.Mutable,
 		Until:    pi.Until,
 		Arch:     yamlArch{List: pi.Arch},
-		Channel:  yamlChannel{List: channelFiltersToYAML(pi.Channel)},
+		Channel:  yamlChannel{List: pi.Channel},
 		Generate: pi.Generate,
 		Prefer:   pi.Prefer,
 	}
@@ -821,7 +808,7 @@ func sliceToYAML(s *Slice) (*yamlSlice, error) {
 	for key, info := range s.Essential {
 		slice.Essential.Values[key.String()] = &yamlEssential{
 			Arch:    yamlArch{info.Arch},
-			Channel: yamlChannel{List: channelFiltersToYAML(info.Channel)},
+			Channel: yamlChannel{List: info.Channel},
 		}
 	}
 	for path, info := range s.Contents {
@@ -945,20 +932,19 @@ var defaultMaintenance = map[string]Maintenance{
 // processes them to check they are valid and not duplicated and, if
 // successful, adds them to slice.
 func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string, slice *Slice) error {
-	// parseChannels validates the 'channel' field of an essential entry. The
-	// filters apply to the channel of the package holding the essential.
-	parseChannels := func(refName string, essentialInfo *yamlEssential) ([]ChannelFilter, error) {
+	// channels validates the 'channel' field of an essential entry. The
+	// patterns apply to the channel of the package holding the essential.
+	channels := func(refName string, essentialInfo *yamlEssential) ([]string, error) {
 		if essentialInfo == nil || len(essentialInfo.Channel.List) == 0 {
 			return nil, nil
 		}
 		if yamlPkg.Store == "" {
 			return nil, fmt.Errorf("slice %s has 'channel' for essential %s but package is not in a store", slice, refName)
 		}
-		filters, err := ParseChannelFilters(essentialInfo.Channel.List)
-		if err != nil {
+		if err := validateChannelPatterns(essentialInfo.Channel.List); err != nil {
 			return nil, fmt.Errorf("slice %s has invalid 'channel' for essential %s: %s", slice, refName, err)
 		}
-		return filters, nil
+		return essentialInfo.Channel.List, nil
 	}
 	addPackageEssential := func(refName string, essentialInfo *yamlEssential) error {
 		sliceKey, err := ParseSliceKey(refName)
@@ -979,7 +965,7 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 		if essentialInfo != nil {
 			archList = essentialInfo.Arch.List
 		}
-		channel, err := parseChannels(refName, essentialInfo)
+		channel, err := channels(refName, essentialInfo)
 		if err != nil {
 			return err
 		}
@@ -1004,7 +990,7 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 		if essentialInfo != nil {
 			archList = essentialInfo.Arch.List
 		}
-		channel, err := parseChannels(refName, essentialInfo)
+		channel, err := channels(refName, essentialInfo)
 		if err != nil {
 			return err
 		}

@@ -6,16 +6,14 @@ import (
 	"github.com/canonical/chisel/internal/setup"
 )
 
-var channelFilterTests = []struct {
+var channelPatternTests = []struct {
 	summary string
 	values  []string
 	err     string
-	// canonical is the rendering of the parsed filters. It defaults to values.
-	canonical []string
-	// match maps a concrete channel to whether the filters match it.
+	// match maps a concrete channel to whether the patterns match it.
 	match map[string]bool
 }{{
-	summary: "No filter matches every channel",
+	summary: "No pattern matches every channel",
 	values:  nil,
 	match:   map[string]bool{"3.0/stable": true, "2.0/edge": true},
 }, {
@@ -44,6 +42,18 @@ var channelFilterTests = []struct {
 		// The exclusion is scoped to its own track, it never means "any
 		// other track".
 		"0.3/edge": false,
+		// A channel without a risk is not a channel, it must not match just
+		// because the missing risk differs from the excluded one.
+		"0.2": false,
+	},
+}, {
+	summary: "Channel without a risk never matches",
+	values:  []string{"0.3/*"},
+	match: map[string]bool{
+		"0.3":   false,
+		"0.3/":  false,
+		"":      false,
+		"0.3/*": true,
 	},
 }, {
 	summary: "Several risks",
@@ -119,29 +129,19 @@ var channelFilterTests = []struct {
 	err:     `track "0.3" is repeated`,
 }}
 
-func (s *S) TestChannelFilters(c *C) {
-	for _, test := range channelFilterTests {
+func (s *S) TestChannelPatterns(c *C) {
+	for _, test := range channelPatternTests {
 		c.Logf("Summary: %s", test.summary)
 
-		filters, err := setup.ParseChannelFilters(test.values)
+		err := setup.ValidateChannelPatterns(test.values)
 		if test.err != "" {
 			c.Assert(err, ErrorMatches, test.err)
 			continue
 		}
 		c.Assert(err, IsNil)
 
-		canonical := test.canonical
-		if canonical == nil {
-			canonical = test.values
-		}
-		rendered := []string(nil)
-		for _, filter := range filters {
-			rendered = append(rendered, filter.String())
-		}
-		c.Assert(rendered, DeepEquals, canonical)
-
 		for channel, expected := range test.match {
-			c.Assert(setup.MatchChannelFilters(filters, channel), Equals, expected,
+			c.Assert(setup.MatchChannelPatterns(test.values, channel), Equals, expected,
 				Commentf("channel %q", channel))
 		}
 	}

@@ -81,7 +81,7 @@ type Slice struct {
 
 type EssentialInfo struct {
 	Arch    []string
-	Channel []ChannelFilter
+	Channel []string
 }
 
 type SliceScripts struct {
@@ -124,7 +124,7 @@ type PathInfo struct {
 	Mutable  bool
 	Until    PathUntil
 	Arch     []string
-	Channel  []ChannelFilter
+	Channel  []string
 	Generate GenerateKind
 	Prefer   string
 }
@@ -431,7 +431,7 @@ func order(pkgs map[string]*Package, keys []SliceKey, arch string, channels map[
 			}
 			// The channel of the package holding the essential decides, the
 			// channel of the required package is irrelevant here.
-			if channel, ok := channels[pkg.Name]; ok && !MatchChannelFilters(info.Channel, channel) {
+			if channel, ok := channels[pkg.Name]; ok && !MatchChannelPatterns(info.Channel, channel) {
 				continue
 			}
 			fqreq := req.String()
