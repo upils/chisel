@@ -399,7 +399,7 @@ func (r *Release) validate() error {
 // If arch is supplied, essential(s) not specific to that arch are not
 // considered. Likewise, if channels holds the channel of the package holding
 // the essential, essential(s) not specific to that channel are not considered.
-func order(pkgs map[string]*Package, keys []SliceKey, arch string, channels map[string]string) ([]SliceKey, error) {
+func order(pkgs map[string]*Package, keys []SliceKey, arch string, channels map[string]Channel) ([]SliceKey, error) {
 
 	// Preprocess the list to improve error messages.
 	for _, key := range keys {

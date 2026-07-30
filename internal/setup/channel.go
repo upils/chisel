@@ -160,19 +160,17 @@ func validateChannelPattern(pattern string) (track string, err error) {
 // A branch, as in "<track>/<risk>/<branch>", is ignored. Branches are ephemeral
 // and thus never part of a pattern, so an entry applies to every branch of the
 // risk it matches.
-func MatchChannelPatterns(patterns []string, channel string) bool {
+func MatchChannelPatterns(patterns []string, channel Channel) bool {
 	if len(patterns) == 0 {
 		return true
 	}
-	track, risk, _ := strings.Cut(channel, "/")
-	risk, _, _ = strings.Cut(risk, "/")
-	if track == "" || risk == "" {
+	if channel.Track == "" || channel.Risk == "" {
 		// A channel without a risk is not a channel. Never match it, rather
 		// than treat the missing risk as one that differs from an excluded one.
 		return false
 	}
 	for _, pattern := range patterns {
-		if matchChannel(pattern, track, risk) {
+		if matchChannel(pattern, channel.Track, channel.Risk) {
 			return true
 		}
 	}

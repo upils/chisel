@@ -4633,16 +4633,26 @@ var setupTests = []setupTest{{
 						Package: "bin-mypkg",
 						Name:    "myslice",
 						Contents: map[string]setup.PathInfo{
-							"/dir/excluded": {Kind: setup.CopyPath, Arch: []string{"amd64"},
-								Channel: []string{"0.2/!stable"}},
-							"/dir/listed": {Kind: setup.CopyPath,
-								Channel: []string{"0.2/beta,edge"}},
-							"/dir/scalar": {Kind: setup.CopyPath,
-								Channel: []string{"0.3/stable"}},
-							"/dir/union": {Kind: setup.CopyPath,
-								Channel: []string{"0.2/*", "0.3/edge"}},
-							"/dir/wildcard*": {Kind: setup.GlobPath,
-								Channel: []string{"0.3/*"}},
+							"/dir/excluded": {
+								Kind: setup.CopyPath, Arch: []string{"amd64"},
+								Channel: []string{"0.2/!stable"},
+							},
+							"/dir/listed": {
+								Kind:    setup.CopyPath,
+								Channel: []string{"0.2/beta,edge"},
+							},
+							"/dir/scalar": {
+								Kind:    setup.CopyPath,
+								Channel: []string{"0.3/stable"},
+							},
+							"/dir/union": {
+								Kind:    setup.CopyPath,
+								Channel: []string{"0.2/*", "0.3/edge"},
+							},
+							"/dir/wildcard*": {
+								Kind:    setup.GlobPath,
+								Channel: []string{"0.3/*"},
+							},
 						},
 					},
 				},
@@ -4901,8 +4911,8 @@ var setupTests = []setupTest{{
 }, {
 	summary: "Essential gated by a matching channel is selected",
 	selrefs: []setup.SliceRef{{
-		Key:     setup.SliceKey{Package: "bin-mypkg", Slice: "myslice"},
-		Channel: "0.3/edge",
+		SliceKey: setup.SliceKey{Package: "bin-mypkg", Slice: "myslice"},
+		Channel:  setup.Channel{Track: "0.3", Risk: "edge"},
 	}},
 	input: map[string]string{
 		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
@@ -4935,12 +4945,14 @@ var setupTests = []setupTest{{
 				},
 			},
 		}},
-		Channels: map[string]string{"bin-mypkg": "0.3/edge"},
+		Channels: map[string]setup.Channel{
+			"bin-mypkg": {Track: "0.3", Risk: "edge"},
+		},
 	},
 }, {
 	summary: "Essential gated by a non-matching channel is skipped",
 	selrefs: []setup.SliceRef{{
-		Key: setup.SliceKey{Package: "bin-mypkg", Slice: "myslice"},
+		SliceKey: setup.SliceKey{Package: "bin-mypkg", Slice: "myslice"},
 	}},
 	input: map[string]string{
 		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
@@ -4967,7 +4979,9 @@ var setupTests = []setupTest{{
 				},
 			},
 		}},
-		Channels: map[string]string{"bin-mypkg": "0.3/stable"},
+		Channels: map[string]setup.Channel{
+			"bin-mypkg": {Track: "0.3", Risk: "stable"},
+		},
 	},
 }, {
 	summary: "Channel-gated essential loops are still detected",

@@ -11,80 +11,81 @@ var channelPatternTests = []struct {
 	values  []string
 	err     string
 	// match maps a concrete channel to whether the patterns match it.
-	match map[string]bool
+	match map[setup.Channel]bool
 }{{
 	summary: "No pattern matches every channel",
 	values:  nil,
-	match:   map[string]bool{"3.0/stable": true, "2.0/edge": true},
+	match: map[setup.Channel]bool{
+		{"3.0", "stable", ""}: true,
+		{"2.0", "edge", ""}:   true,
+	},
 }, {
 	summary: "Precise channel",
 	values:  []string{"0.3/stable"},
-	match: map[string]bool{
-		"0.3/stable": true,
-		"0.3/edge":   false,
-		"0.2/stable": false,
+	match: map[setup.Channel]bool{
+		{"0.3", "stable", ""}: true,
+		{"0.3", "edge", ""}:   false,
+		{"0.2", "stable", ""}: false,
 		// Branches are ephemeral, hence never part of a pattern. The entry
 		// applies to every branch of the risk it matches.
-		"0.3/stable/mybranch": true,
-		"0.3/edge/mybranch":   false,
+		{"0.3", "stable", "mybranch"}: true,
+		{"0.3", "edge", "mybranch"}:   false,
 	},
 }, {
 	summary: "All risks of a track",
 	values:  []string{"0.3/*"},
-	match: map[string]bool{
-		"0.3/stable": true,
-		"0.3/edge":   true,
-		"0.2/stable": false,
+	match: map[setup.Channel]bool{
+		{"0.3", "stable", ""}: true,
+		{"0.3", "edge", ""}:   true,
+		{"0.2", "stable", ""}: false,
 	},
 }, {
 	summary: "Excluded risk",
 	values:  []string{"0.2/!stable"},
-	match: map[string]bool{
-		"0.2/stable": false,
-		"0.2/edge":   true,
-		"0.2/beta":   true,
+	match: map[setup.Channel]bool{
+		{"0.2", "stable", ""}: false,
+		{"0.2", "edge", ""}:   true,
+		{"0.2", "beta", ""}:   true,
 		// The exclusion is scoped to its own track, it never means "any
 		// other track".
-		"0.3/edge": false,
-		// A channel without a risk is not a channel, it must not match just
-		// because the missing risk differs from the excluded one.
-		"0.2": false,
+		{"0.3", "edge", ""}: false,
 		// The branch is ignored, it must not be taken for part of the risk.
-		"0.2/stable/mybranch": false,
-		"0.2/edge/mybranch":   true,
+		{"0.2", "stable", "mybranch"}: false,
+		{"0.2", "edge", "mybranch"}:   true,
 	},
 }, {
 	summary: "Channel without a risk never matches",
 	values:  []string{"0.3/*"},
-	match: map[string]bool{
-		"0.3":  false,
-		"0.3/": false,
-		"":     false,
+	match: map[setup.Channel]bool{
+		// A channel without a risk is not a channel, it must not match just
+		// because the missing risk differs from an excluded one.
+		{Track: "0.3"}: false,
+		{}:             false,
 	},
 }, {
 	summary: "Several risks",
 	values:  []string{"0.2/beta,edge"},
-	match: map[string]bool{
-		"0.2/beta":   true,
-		"0.2/edge":   true,
-		"0.2/stable": false,
+	match: map[setup.Channel]bool{
+		{"0.2", "beta", ""}:   true,
+		{"0.2", "edge", ""}:   true,
+		{"0.2", "stable", ""}: false,
 	},
 }, {
 	summary: "Union of several tracks",
 	values:  []string{"0.2/!stable", "0.3/*"},
-	match: map[string]bool{
-		"0.2/edge":   true,
-		"0.2/stable": false,
-		"0.3/stable": true,
+	match: map[setup.Channel]bool{
+		{"0.2", "edge", ""}:   true,
+		{"0.2", "stable", ""}: false,
+		{"0.3", "stable", ""}: true,
 	},
 }, {
 	summary: "Every known risk",
 	values:  []string{"0.3/stable,candidate,beta,edge"},
-	match: map[string]bool{
-		"0.3/stable":    true,
-		"0.3/candidate": true,
-		"0.3/beta":      true,
-		"0.3/edge":      true,
+	match: map[setup.Channel]bool{
+		{"0.3", "stable", ""}:    true,
+		{"0.3", "candidate", ""}: true,
+		{"0.3", "beta", ""}:      true,
+		{"0.3", "edge", ""}:      true,
 	},
 }, {
 	summary: "Unknown risk",
@@ -173,7 +174,7 @@ func (s *S) TestChannelPatterns(c *C) {
 
 		for channel, expected := range test.match {
 			c.Assert(setup.MatchChannelPatterns(test.values, channel), Equals, expected,
-				Commentf("channel %q", channel))
+				Commentf("channel %q", channel.String()))
 		}
 	}
 }
