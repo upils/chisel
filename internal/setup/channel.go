@@ -90,17 +90,16 @@ func validateRisk(risk string) error {
 // may appear at most once across the values so that the resulting set of
 // channels is unambiguous.
 func validateChannelPatterns(patterns []string) error {
-	for i, pattern := range patterns {
+	seen := make(map[string]bool, len(patterns))
+	for _, pattern := range patterns {
 		track, err := validateChannelPattern(pattern)
 		if err != nil {
 			return fmt.Errorf("%q: %s", pattern, err)
 		}
-		for _, seen := range patterns[:i] {
-			// The pattern is only valid, hence the track is well defined.
-			if seenTrack, _, _ := strings.Cut(seen, "/"); seenTrack == track {
-				return fmt.Errorf("track %q is repeated", track)
-			}
+		if seen[track] {
+			return fmt.Errorf("track %q is repeated", track)
 		}
+		seen[track] = true
 	}
 	return nil
 }

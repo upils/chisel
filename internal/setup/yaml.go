@@ -937,9 +937,9 @@ var defaultMaintenance = map[string]Maintenance{
 // processes them to check they are valid and not duplicated and, if
 // successful, adds them to slice.
 func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string, slice *Slice) error {
-	// channels validates the 'channel' field of an essential entry. The
+	// validateChannels validates the 'channel' field of an essential entry. The
 	// patterns apply to the channel of the package holding the essential.
-	channels := func(refName string, essentialInfo *yamlEssential) ([]string, error) {
+	validateChannels := func(refName string, essentialInfo *yamlEssential) ([]string, error) {
 		if essentialInfo == nil || len(essentialInfo.Channel.List) == 0 {
 			return nil, nil
 		}
@@ -970,7 +970,7 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 		if essentialInfo != nil {
 			archList = essentialInfo.Arch.List
 		}
-		channel, err := channels(refName, essentialInfo)
+		channel, err := validateChannels(refName, essentialInfo)
 		if err != nil {
 			return err
 		}
@@ -995,7 +995,7 @@ func parseEssentials(yamlPkg *yamlPackage, yamlSlice *yamlSlice, pkgPath string,
 		if essentialInfo != nil {
 			archList = essentialInfo.Arch.List
 		}
-		channel, err := channels(refName, essentialInfo)
+		channel, err := validateChannels(refName, essentialInfo)
 		if err != nil {
 			return err
 		}
