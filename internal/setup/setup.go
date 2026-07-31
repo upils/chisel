@@ -80,7 +80,8 @@ type Slice struct {
 }
 
 type EssentialInfo struct {
-	Arch []string
+	Arch    []string
+	Channel []string
 }
 
 type SliceScripts struct {
@@ -123,6 +124,7 @@ type PathInfo struct {
 	Mutable  bool
 	Until    PathUntil
 	Arch     []string
+	Channel  []string
 	Generate GenerateKind
 	Prefer   string
 }
@@ -359,8 +361,9 @@ func (r *Release) validate() error {
 	// same as an essential with all archs, i.e. Chisel does not use arch to
 	// partition the dependency set. If we were to use arch, we would allow
 	// combinations of dependencies which are overly complex and brittle, that
-	// is why it is better to be more strict here.
-	_, err = order(r.Packages, keys, "")
+	// is why it is better to be more strict here. The same reasoning applies to
+	// channels, hence the nil map below.
+	_, err = order(r.Packages, keys, "", nil)
 	if err != nil {
 		return err
 	}
@@ -394,8 +397,9 @@ func (r *Release) validate() error {
 // return an error if there are cycles.
 //
 // If arch is supplied, essential(s) not specific to that arch are not
-// considered.
-func order(pkgs map[string]*Package, keys []SliceKey, arch string) ([]SliceKey, error) {
+// considered. Likewise, if channels holds the channel of the package holding
+// the essential, essential(s) not specific to that channel are not considered.
+func order(pkgs map[string]*Package, keys []SliceKey, arch string, channels map[string]Channel) ([]SliceKey, error) {
 
 	// Preprocess the list to improve error messages.
 	for _, key := range keys {
@@ -423,6 +427,11 @@ func order(pkgs map[string]*Package, keys []SliceKey, arch string) ([]SliceKey, 
 		predecessors := successors[fqslice]
 		for req, info := range slice.Essential {
 			if len(info.Arch) > 0 && arch != "" && !slices.Contains(info.Arch, arch) {
+				continue
+			}
+			// The channel of the package holding the essential decides, the
+			// channel of the required package is irrelevant here.
+			if channel, ok := channels[pkg.Name]; ok && !MatchChannelPatterns(info.Channel, channel) {
 				continue
 			}
 			fqreq := req.String()
@@ -560,7 +569,7 @@ func Select(release *Release, refs []SliceRef, arch string) (*Selection, error) 
 	for i, ref := range refs {
 		slices[i] = ref.SliceKey
 	}
-	sorted, err := order(release.Packages, slices, arch)
+	sorted, err := order(release.Packages, slices, arch, channels)
 	if err != nil {
 		return nil, err
 	}
