@@ -41,24 +41,40 @@ func (c Channel) String() string {
 	return channel
 }
 
+// The forms a channel and a channel pattern must take, as reported to the user.
+const (
+	channelForm        = "<track>[/<risk>[/<branch>]]"
+	channelPatternForm = "<track>/<risk>"
+)
+
+// splitChannel splits a channel or a channel pattern on "/", checking what the
+// two have in common: no spaces and no empty segment. How many segments are
+// expected and what each one means is left to the caller, as that is where the
+// two differ. form is the shape reported on error.
+func splitChannel(value, form string) ([]string, error) {
+	if strings.ContainsFunc(value, unicode.IsSpace) {
+		return nil, errors.New("must not contain spaces")
+	}
+	segments := strings.Split(value, "/")
+	if slices.Contains(segments, "") {
+		return nil, fmt.Errorf("must be %s", form)
+	}
+	return segments, nil
+}
+
 // parseChannel parses a "<track>[/<risk>[/<branch>]]" channel, as written.
-// Validation is intentionally loose, the track, the risk and the branch are
-// only checked for their presence so that their values are not rejected here.
+// Validation is intentionally loose, the track and the branch are only checked
+// for their presence so that their values are not rejected here.
 func parseChannel(channel string) (Channel, error) {
 	if channel == "" {
 		return Channel{}, errors.New("missing channel")
 	}
-	if strings.ContainsFunc(channel, unicode.IsSpace) {
-		return Channel{}, errors.New("channel must not contain spaces")
+	segments, err := splitChannel(channel, channelForm)
+	if err != nil {
+		return Channel{}, fmt.Errorf("channel %s", err)
 	}
-	segments := strings.Split(channel, "/")
 	if len(segments) > 3 {
-		return Channel{}, errors.New("channel must be <track>[/<risk>[/<branch>]]")
-	}
-	for _, segment := range segments {
-		if segment == "" {
-			return Channel{}, errors.New("channel must be <track>[/<risk>[/<branch>]]")
-		}
+		return Channel{}, fmt.Errorf("channel must be %s", channelForm)
 	}
 	parsed := Channel{Track: segments[0]}
 	if len(segments) > 1 {
@@ -104,49 +120,58 @@ func validateChannelPatterns(patterns []string) error {
 	return nil
 }
 
-// validateChannelPattern validates a single pattern and returns its track.
+// validateChannelPattern validates a single pattern and returns its track. A
+// pattern holds no branch, hence exactly one track and one risk part.
 func validateChannelPattern(pattern string) (track string, err error) {
-	if strings.ContainsFunc(pattern, unicode.IsSpace) {
-		return "", errors.New("must not contain spaces")
+	segments, err := splitChannel(pattern, channelPatternForm)
+	if err != nil {
+		return "", err
 	}
-	track, riskPart, ok := strings.Cut(pattern, "/")
-	if !ok || track == "" || riskPart == "" {
-		return "", errors.New("must be <track>/<risk>")
+	if len(segments) != 2 {
+		return "", fmt.Errorf("must be %s", channelPatternForm)
 	}
+	track, riskPart := segments[0], segments[1]
 	if strings.ContainsAny(track, "*!,") {
 		return "", errors.New("only the risk accepts '*', '!' and ','")
 	}
-	if riskPart == "*" {
-		return track, nil
-	}
-	if strings.Contains(riskPart, "*") {
+	if riskPart != "*" && strings.Contains(riskPart, "*") {
+		// Checked before the risk part takes one of the forms below, as a
+		// wildcard is not allowed within any of them.
 		return "", errors.New("'*' must be the whole risk")
 	}
-	risks := strings.Split(riskPart, ",")
-	if except, ok := strings.CutPrefix(riskPart, "!"); ok {
-		if len(risks) > 1 {
+
+	// The risk part takes one of the three forms of the grammar.
+	switch {
+	case riskPart == "*":
+		// Every risk of the track, nothing more to validate.
+	case strings.HasPrefix(riskPart, "!"):
+		// Every risk of the track but the excluded one.
+		except := strings.TrimPrefix(riskPart, "!")
+		if strings.Contains(except, ",") {
 			return "", errors.New("'!' cannot be combined with other risks")
 		}
 		if except == "" {
-			return "", errors.New("must be <track>/<risk>")
+			return "", fmt.Errorf("must be %s", channelPatternForm)
 		}
 		if err := validateRisk(except); err != nil {
 			return "", err
 		}
-		return track, nil
-	}
-	for i, risk := range risks {
-		if risk == "" {
-			return "", errors.New("must be <track>/<risk>")
-		}
-		if strings.Contains(risk, "!") {
-			return "", errors.New("'!' must prefix the whole risk")
-		}
-		if slices.Contains(risks[:i], risk) {
-			return "", fmt.Errorf("risk %q is repeated", risk)
-		}
-		if err := validateRisk(risk); err != nil {
-			return "", err
+	default:
+		// Only the listed risks of the track.
+		risks := strings.Split(riskPart, ",")
+		for i, risk := range risks {
+			if risk == "" {
+				return "", fmt.Errorf("must be %s", channelPatternForm)
+			}
+			if strings.Contains(risk, "!") {
+				return "", errors.New("'!' must prefix the whole risk")
+			}
+			if slices.Contains(risks[:i], risk) {
+				return "", fmt.Errorf("risk %q is repeated", risk)
+			}
+			if err := validateRisk(risk); err != nil {
+				return "", err
+			}
 		}
 	}
 	return track, nil

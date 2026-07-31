@@ -104,9 +104,11 @@ var channelPatternTests = []struct {
 	values:  []string{"0.3/Stable"},
 	err:     `"0.3/Stable": unknown risk "Stable", must be one of stable, candidate, beta, edge`,
 }, {
-	summary: "Risk holding a branch",
+	// A pattern never holds a branch, it applies to every branch of the risks
+	// it matches.
+	summary: "Pattern holding a branch",
 	values:  []string{"0.3/stable/mybranch"},
-	err:     `"0.3/stable/mybranch": unknown risk "stable/mybranch", must be one of stable, candidate, beta, edge`,
+	err:     `"0.3/stable/mybranch": must be <track>/<risk>`,
 }, {
 	summary: "Missing risk",
 	values:  []string{"0.3"},
