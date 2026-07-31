@@ -6,6 +6,11 @@ import (
 	"github.com/canonical/chisel/internal/setup"
 )
 
+// channelPatternTests covers validating and matching the patterns of a
+// "channel" field. The valid patterns come first, then the invalid ones,
+// grouped after the validation phase they exercise. Note several of the latter
+// share the "must be <track>/<risk>" message while entering through different
+// phases, hence none is redundant.
 var channelPatternTests = []struct {
 	summary string
 	values  []string
@@ -88,27 +93,10 @@ var channelPatternTests = []struct {
 		{"0.3", "edge", ""}:      true,
 	},
 }, {
-	summary: "Unknown risk",
-	values:  []string{"0.3/whatever"},
-	err:     `"0.3/whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
-}, {
-	summary: "Unknown risk in a list",
-	values:  []string{"0.3/edge,whatever"},
-	err:     `"0.3/edge,whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
-}, {
-	summary: "Unknown excluded risk",
-	values:  []string{"0.3/!whatever"},
-	err:     `"0.3/!whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
-}, {
-	summary: "Risks are case sensitive",
-	values:  []string{"0.3/Stable"},
-	err:     `"0.3/Stable": unknown risk "Stable", must be one of stable, candidate, beta, edge`,
-}, {
-	// A pattern never holds a branch, it applies to every branch of the risks
-	// it matches.
-	summary: "Pattern holding a branch",
-	values:  []string{"0.3/stable/mybranch"},
-	err:     `"0.3/stable/mybranch": must be <track>/<risk>`,
+	// Splitting the pattern, in common with a concrete channel.
+	summary: "Spaces",
+	values:  []string{"0.3/not stable"},
+	err:     `"0.3/not stable": must not contain spaces`,
 }, {
 	summary: "Missing risk",
 	values:  []string{"0.3"},
@@ -122,10 +110,13 @@ var channelPatternTests = []struct {
 	values:  []string{"/stable"},
 	err:     `"/stable": must be <track>/<risk>`,
 }, {
-	summary: "Empty excluded risk",
-	values:  []string{"0.3/!"},
-	err:     `"0.3/!": must be <track>/<risk>`,
+	// A pattern never holds a branch, it applies to every branch of the risks
+	// it matches.
+	summary: "Pattern holding a branch",
+	values:  []string{"0.3/stable/mybranch"},
+	err:     `"0.3/stable/mybranch": must be <track>/<risk>`,
 }, {
+	// The track is a literal, the operators belong to the risk.
 	summary: "Wildcard track",
 	values:  []string{"*/stable"},
 	err:     `"\*/stable": only the risk accepts '\*', '!' and ','`,
@@ -134,13 +125,36 @@ var channelPatternTests = []struct {
 	values:  []string{"0.3-*/stable"},
 	err:     `"0.3-\*/stable": only the risk accepts '\*', '!' and ','`,
 }, {
+	// A wildcard is the whole risk part or nothing, it is never a glob.
 	summary: "Wildcard is not a glob",
 	values:  []string{"0.3/e*"},
 	err:     `"0.3/e\*": '\*' must be the whole risk`,
 }, {
+	// The "!<risk>" form.
+	summary: "Unknown excluded risk",
+	values:  []string{"0.3/!whatever"},
+	err:     `"0.3/!whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+}, {
 	summary: "Exclusion combined with other risks",
 	values:  []string{"0.3/!stable,edge"},
 	err:     `"0.3/!stable,edge": '!' cannot be combined with other risks`,
+}, {
+	summary: "Empty excluded risk",
+	values:  []string{"0.3/!"},
+	err:     `"0.3/!": must be <track>/<risk>`,
+}, {
+	// The "<risk>[,<risk>]" form.
+	summary: "Unknown risk",
+	values:  []string{"0.3/whatever"},
+	err:     `"0.3/whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+}, {
+	summary: "Unknown risk in a list",
+	values:  []string{"0.3/edge,whatever"},
+	err:     `"0.3/edge,whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+}, {
+	summary: "Risks are case sensitive",
+	values:  []string{"0.3/Stable"},
+	err:     `"0.3/Stable": unknown risk "Stable", must be one of stable, candidate, beta, edge`,
 }, {
 	summary: "Exclusion not prefixing the risk part",
 	values:  []string{"0.3/edge,!stable"},
@@ -150,10 +164,17 @@ var channelPatternTests = []struct {
 	values:  []string{"0.3/edge,edge"},
 	err:     `"0.3/edge,edge": risk "edge" is repeated`,
 }, {
-	summary: "Spaces",
-	values:  []string{"0.3/not stable"},
-	err:     `"0.3/not stable": must not contain spaces`,
+	// A trailing or leading comma leaves an empty risk in the list, which the
+	// split above cannot catch as the risk part is not an empty segment.
+	summary: "Trailing comma in a list",
+	values:  []string{"0.3/edge,"},
+	err:     `"0.3/edge,": must be <track>/<risk>`,
 }, {
+	summary: "Leading comma in a list",
+	values:  []string{"0.3/,edge"},
+	err:     `"0.3/,edge": must be <track>/<risk>`,
+}, {
+	// Across the patterns of one "channel" field.
 	summary: "Repeated track",
 	values:  []string{"0.3/*", "0.3/edge"},
 	err:     `track "0.3" is repeated`,
