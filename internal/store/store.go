@@ -12,15 +12,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/deb"
+	"github.com/canonical/chisel/internal/manifestutil"
 )
 
 // Store provides access to packages from the Store API.
 type Store interface {
 	Options() *Options
-	Fetch(name, track, risk string) (io.ReadSeekCloser, *archive.PackageInfo, error)
+	Fetch(name, track, risk string) (io.ReadSeekCloser, manifestutil.PackageInfo, error)
 }
 
 type Options struct {
@@ -29,6 +29,21 @@ type Options struct {
 	Kind     string
 	Version  string
 }
+
+type PackageInfo struct {
+	Name     string
+	Version  string
+	Arch     string
+	Revision int
+	SHA384   string
+}
+
+func (p *PackageInfo) PkgName() string                 { return p.Name }
+func (p *PackageInfo) PkgVersion() string              { return p.Version }
+func (p *PackageInfo) PkgRevision() int                { return p.Revision }
+func (p *PackageInfo) PkgArch() string                 { return p.Arch }
+func (p *PackageInfo) PkgDigestKind() cache.DigestKind { return cache.SHA384 }
+func (p *PackageInfo) PkgDigest() string               { return p.SHA384 }
 
 type storeKind string
 
@@ -231,7 +246,7 @@ func (s *binStore) Options() *Options {
 	return &s.options
 }
 
-func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *archive.PackageInfo, error) {
+func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, manifestutil.PackageInfo, error) {
 	if risk == "" {
 		risk = defaultRisk
 	}
@@ -243,11 +258,11 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, *archive.
 	}
 
 	digest := rev.Download.SHA384
-	info := &archive.PackageInfo{
+	info := &PackageInfo{
 		Name:     name,
 		Version:  rev.Version,
 		Revision: rev.Revision,
-		SHA384:   rev.Download.SHA384,
+		SHA384:   digest,
 	}
 
 	const digestKind = cache.SHA384

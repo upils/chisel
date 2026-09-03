@@ -30,8 +30,6 @@ type PackageInfo struct {
 	Version  string
 	Arch     string
 	SHA256   string
-	Revision int
-	SHA384   string
 }
 
 func (p *PackageInfo) PkgName() string                 { return p.Name }
