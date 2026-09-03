@@ -19,7 +19,7 @@ type checkReleaseArchivesTest struct {
 	summary string
 	arch    string
 	release map[string]string
-	pkgs    []*testutil.TestPackage
+	pkgs    []*testutil.DebPackage
 	stdout  string
 	err     string
 }
@@ -41,7 +41,7 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 					contents:
 		`,
 	},
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./dir/"),
@@ -74,7 +74,7 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 						/link/b-bar:
 		`,
 	},
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./mode/"),
@@ -135,7 +135,7 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 						/linkbar:
 		`,
 	},
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./mode/"),
@@ -168,7 +168,7 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 						/dir/bar:
 		`,
 	},
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./dir/"),
@@ -219,15 +219,15 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 		`,
 	},
 	arch: "arm64",
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
-		Arch: "arm64",
+		Info: archive.PackageInfo{Arch: "arm64"},
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./dir/"),
 		}),
 	}, {
 		Name: "pkg-b",
-		Arch: "arm64",
+		Info: archive.PackageInfo{Arch: "arm64"},
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0756, "./dir/"),
 		}),
@@ -266,7 +266,7 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 						/mode/bar:
 		`,
 	},
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./mode/"),
@@ -304,7 +304,7 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 						/mode/bar:
 		`,
 	},
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./mode/"),
@@ -357,7 +357,7 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 						/mode/bar:
 		`,
 	},
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./mode/"),
@@ -390,7 +390,7 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 						/link/bar:
 		`,
 	},
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Lnk(0777, "./link", "./one"),
@@ -432,7 +432,7 @@ var checkReleaseArchivesTests = []checkReleaseArchivesTest{{
 						/mode/bar:
 		`,
 	},
-	pkgs: []*testutil.TestPackage{{
+	pkgs: []*testutil.DebPackage{{
 		Name: "pkg-a",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./mode/"),
@@ -487,7 +487,7 @@ func (s *ChiselSuite) TestRun(c *C) {
 
 		archives := map[string]archive.Archive{}
 		for name, setupArchive := range release.Archives {
-			pkgs := make(map[string]*testutil.TestPackage)
+			pkgs := make(map[string]*testutil.DebPackage)
 			for _, pkg := range test.pkgs {
 				if len(pkg.Archives) == 0 || slices.Contains(pkg.Archives, name) {
 					pkgs[pkg.Name] = pkg

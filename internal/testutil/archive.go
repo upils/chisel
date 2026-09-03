@@ -10,7 +10,7 @@ import (
 
 type TestArchive struct {
 	Opts     archive.Options
-	Packages map[string]*TestPackage
+	Packages map[string]*DebPackage
 }
 
 func (a *TestArchive) Options() *archive.Options {
@@ -22,13 +22,7 @@ func (a *TestArchive) Fetch(pkgName string) (io.ReadSeekCloser, *archive.Package
 	if !ok {
 		return nil, nil, fmt.Errorf("cannot find package %q in archive", pkgName)
 	}
-	info := &archive.PackageInfo{
-		Name:    pkg.Name,
-		Version: pkg.Version,
-		SHA256:  pkg.Hash,
-		Arch:    pkg.Arch,
-	}
-	return ReadSeekNopCloser(bytes.NewReader(pkg.Data)), info, nil
+	return ReadSeekNopCloser(bytes.NewReader(pkg.Data)), pkg.info(), nil
 }
 
 func (a *TestArchive) Exists(pkg string) bool {
@@ -41,10 +35,5 @@ func (a *TestArchive) Info(pkgName string) (*archive.PackageInfo, error) {
 	if !ok {
 		return nil, fmt.Errorf("cannot find package %q in archive", pkgName)
 	}
-	return &archive.PackageInfo{
-		Name:    pkg.Name,
-		Version: pkg.Version,
-		SHA256:  pkg.Hash,
-		Arch:    pkg.Arch,
-	}, nil
+	return pkg.info(), nil
 }
