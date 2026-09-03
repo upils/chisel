@@ -367,9 +367,9 @@ func (s *storeSuite) TestFetchCacheMiss(c *C) {
 	c.Assert(err, IsNil)
 	defer reader.Close()
 
-	c.Assert(info.Name, Equals, "curl")
-	c.Assert(info.Version, Equals, "8.5.0")
-	c.Assert(info.SHA384, Equals, digest)
+	c.Assert(info.PkgName(), Equals, "curl")
+	c.Assert(info.PkgVersion(), Equals, "8.5.0")
+	c.Assert(info.PkgDigest(), Equals, digest)
 
 	data, err := io.ReadAll(reader)
 	c.Assert(err, IsNil)
@@ -420,8 +420,8 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 	c.Assert(err, IsNil)
 	defer reader.Close()
 
-	c.Assert(info.Name, Equals, "curl")
-	c.Assert(info.SHA384, Equals, digest)
+	c.Assert(info.PkgName(), Equals, "curl")
+	c.Assert(info.PkgDigest(), Equals, digest)
 	c.Assert(resolveCallCount, Equals, 1)
 
 	data, err := io.ReadAll(reader)
