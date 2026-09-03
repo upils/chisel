@@ -31,7 +31,8 @@ type slicerTest struct {
 	summary       string
 	arch          string
 	release       map[string]string
-	pkgs          []*testutil.TestPackage
+	debPkgs       []*testutil.DebPackage
+	binPkgs       []*testutil.BinPackage
 	slices        []setup.SliceKey
 	hackopt       func(c *C, opts *slicer.RunOptions)
 	filesystem    map[string]string
@@ -251,7 +252,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Copyright is not installed implicitly",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		// Add the copyright entries to the package.
 		Data: testutil.MustMakeDeb(append(testutil.TestPackageEntries, testPackageCopyrightEntries...)),
@@ -277,7 +278,7 @@ var slicerTests = []slicerTest{{
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"},
 		{"other-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.PackageData["test-package"],
 	}, {
@@ -321,7 +322,7 @@ var slicerTests = []slicerTest{{
 		{"a-implicit-parent", "myslice"},
 		{"b-explicit-dir", "myslice"},
 		{"c-implicit-parent", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "a-implicit-parent",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./dir/"),
@@ -379,7 +380,7 @@ var slicerTests = []slicerTest{{
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"},
 		{"other-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.PackageData["test-package"],
 	}, {
@@ -716,7 +717,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Duplicate copyright symlink is ignored",
 	slices:  []setup.SliceKey{{"copyright-symlink-openssl", "bins"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "copyright-symlink-openssl",
 		Data: testutil.MustMakeDeb(packageEntries["copyright-symlink-openssl"]),
 	}, {
@@ -782,29 +783,23 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Multiple archives with priority",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"other-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
-		Name:    "test-package",
-		Hash:    "h1",
-		Version: "v1",
-		Arch:    "a1",
+	debPkgs: []*testutil.DebPackage{{
+		Name: "test-package",
+		Info: archive.PackageInfo{Version: "v1", Arch: "a1", SHA256: "h1"},
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Reg(0644, "./file", "from foo"),
 		}),
 		Archives: []string{"foo"},
 	}, {
-		Name:    "test-package",
-		Hash:    "h2",
-		Version: "v2",
-		Arch:    "a2",
+		Name: "test-package",
+		Info: archive.PackageInfo{Version: "v2", Arch: "a2", SHA256: "h2"},
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Reg(0644, "./file", "from bar"),
 		}),
 		Archives: []string{"bar"},
 	}, {
-		Name:    "other-package",
-		Hash:    "h3",
-		Version: "v3",
-		Arch:    "a3",
+		Name: "other-package",
+		Info: archive.PackageInfo{Version: "v3", Arch: "a3", SHA256: "h3"},
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Reg(0644, "./other-file", "from bar"),
 		}),
@@ -866,20 +861,16 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Pinned archive bypasses higher priority",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
-		Name:    "test-package",
-		Hash:    "h1",
-		Version: "v1",
-		Arch:    "a1",
+	debPkgs: []*testutil.DebPackage{{
+		Name: "test-package",
+		Info: archive.PackageInfo{Version: "v1", Arch: "a1", SHA256: "h1"},
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Reg(0644, "./file", "from foo"),
 		}),
 		Archives: []string{"foo"},
 	}, {
-		Name:    "test-package",
-		Hash:    "h2",
-		Version: "v2",
-		Arch:    "a2",
+		Name: "test-package",
+		Info: archive.PackageInfo{Version: "v2", Arch: "a2", SHA256: "h2"},
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Reg(0644, "./file", "from bar"),
 		}),
@@ -934,7 +925,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Pinned archive does not have the package",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Reg(0644, "./file", "from foo"),
@@ -958,7 +949,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "No archives have the package",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs:    []*testutil.TestPackage{},
+	debPkgs: []*testutil.DebPackage{},
 	release: map[string]string{
 		"chisel.yaml": testutil.DefaultChiselYamlTwoArchives,
 		"slices/mydir/test-package.yaml": `
@@ -973,7 +964,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Negative priority archives are ignored when not explicitly pinned in package",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Reg(0644, "./file", "from foo"),
@@ -1010,11 +1001,9 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Negative priority archive explicitly pinned in package",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
-		Name:    "test-package",
-		Hash:    "h1",
-		Version: "v1",
-		Arch:    "a1",
+	debPkgs: []*testutil.DebPackage{{
+		Name: "test-package",
+		Info: archive.PackageInfo{Version: "v1", Arch: "a1", SHA256: "h1"},
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Reg(0644, "./file", "from foo"),
 		}),
@@ -1315,18 +1304,14 @@ var slicerTests = []slicerTest{{
 		{"test-package", "myslice"},
 		{"other-package", "myslice"},
 	},
-	pkgs: []*testutil.TestPackage{{
-		Name:    "test-package",
-		Hash:    "h1",
-		Version: "v1",
-		Arch:    "a1",
-		Data:    testutil.PackageData["test-package"],
+	debPkgs: []*testutil.DebPackage{{
+		Name: "test-package",
+		Info: archive.PackageInfo{Version: "v1", Arch: "a1", SHA256: "h1"},
+		Data: testutil.PackageData["test-package"],
 	}, {
-		Name:    "other-package",
-		Hash:    "h2",
-		Version: "v2",
-		Arch:    "a2",
-		Data:    testutil.PackageData["other-package"],
+		Name: "other-package",
+		Info: archive.PackageInfo{Version: "v2", Arch: "a2", SHA256: "h2"},
+		Data: testutil.PackageData["other-package"],
 	}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1351,18 +1336,14 @@ var slicerTests = []slicerTest{{
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"},
 	},
-	pkgs: []*testutil.TestPackage{{
-		Name:    "test-package",
-		Hash:    "h1",
-		Version: "v1",
-		Arch:    "a1",
-		Data:    testutil.PackageData["test-package"],
+	debPkgs: []*testutil.DebPackage{{
+		Name: "test-package",
+		Info: archive.PackageInfo{Version: "v1", Arch: "a1", SHA256: "h1"},
+		Data: testutil.PackageData["test-package"],
 	}, {
-		Name:    "other-package",
-		Hash:    "h2",
-		Version: "v2",
-		Arch:    "a2",
-		Data:    testutil.PackageData["other-package"],
+		Name: "other-package",
+		Info: archive.PackageInfo{Version: "v2", Arch: "a2", SHA256: "h2"},
+		Data: testutil.PackageData["other-package"],
 	}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
@@ -1384,7 +1365,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Relative paths are properly trimmed during extraction",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			// This particular path starting with "/foo" is chosen to test for
@@ -1465,7 +1446,7 @@ var slicerTests = []slicerTest{{
 	slices: []setup.SliceKey{
 		{"test-package", "slice1"},
 		{"test-package", "slice2"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1497,8 +1478,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Hard link entries can be extracted without extracting the regular file",
 	slices: []setup.SliceKey{
-		{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1528,7 +1508,7 @@ var slicerTests = []slicerTest{{
 	summary: "Hard link identifier for different groups",
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1563,7 +1543,7 @@ var slicerTests = []slicerTest{{
 	summary: "Single hard link entry can be extracted without regular file and no hard links are created",
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1590,7 +1570,7 @@ var slicerTests = []slicerTest{{
 	summary: "Hard link to symlink does not follow symlink",
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1624,7 +1604,7 @@ var slicerTests = []slicerTest{{
 		{"test-package1", "myslice"},
 		{"test-package2", "myslice"},
 	},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package1",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1673,7 +1653,7 @@ var slicerTests = []slicerTest{{
 	summary: "Mutations for hard links are forbidden",
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1698,7 +1678,7 @@ var slicerTests = []slicerTest{{
 	summary: "Hard links can be marked as mutable, but not mutated",
 	slices: []setup.SliceKey{
 		{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1727,7 +1707,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Hard links cannot escape the target directory",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1747,7 +1727,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Cannot extract outside of target directory",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1770,7 +1750,7 @@ var slicerTests = []slicerTest{{
 		{"test-package1", "myslice"},
 		{"test-package2", "myslice"},
 	},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package1",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1831,7 +1811,7 @@ var slicerTests = []slicerTest{{
 		{"test-package1", "myslice"},
 		{"test-package2", "myslice"},
 	},
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package1",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
 			testutil.Dir(0755, "./"),
@@ -1939,10 +1919,11 @@ var slicerTests = []slicerTest{{
 	summary: "Store package fetching not yet implemented",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"bin-store-pkg", "myslice"}},
 	arch:    "amd64",
-	pkgs: []*testutil.TestPackage{{
+	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.PackageData["test-package"],
-	}, {
+	}},
+	binPkgs: []*testutil.BinPackage{{
 		Name:  "store-pkg",
 		Store: "bin",
 		Data:  testutil.PackageData["test-package"],
@@ -2016,25 +1997,12 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 			if _, ok := test.release["chisel.yaml"]; !ok {
 				test.release["chisel.yaml"] = testutil.DefaultChiselYaml
 			}
-			if test.pkgs == nil {
-				test.pkgs = []*testutil.TestPackage{{
+			if test.debPkgs == nil && test.binPkgs == nil {
+				test.debPkgs = []*testutil.DebPackage{{
 					Name: "test-package",
 					Data: testutil.PackageData["test-package"],
 				}}
 			}
-			for _, pkg := range test.pkgs {
-				// We need to set these fields for manifest validation.
-				if pkg.Arch == "" {
-					pkg.Arch = "arch"
-				}
-				if pkg.Hash == "" {
-					pkg.Hash = "hash"
-				}
-				if pkg.Version == "" {
-					pkg.Version = "version"
-				}
-			}
-
 			releaseDir := c.MkDir()
 			for path, data := range test.release {
 				fpath := filepath.Join(releaseDir, path)
@@ -2072,11 +2040,8 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 
 			archives := map[string]archive.Archive{}
 			for name, setupArchive := range release.Archives {
-				pkgs := make(map[string]*testutil.TestPackage)
-				for _, pkg := range test.pkgs {
-					if pkg.Store != "" {
-						continue
-					}
+				pkgs := make(map[string]*testutil.DebPackage)
+				for _, pkg := range test.debPkgs {
 					if len(pkg.Archives) == 0 || slices.Contains(pkg.Archives, name) {
 						pkgs[pkg.Name] = pkg
 					}
@@ -2097,8 +2062,8 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 
 			stores := map[string]store.Store{}
 			for name, relStore := range release.Stores {
-				pkgs := make(map[string]*testutil.TestPackage)
-				for _, pkg := range test.pkgs {
+				pkgs := make(map[string]*testutil.BinPackage)
+				for _, pkg := range test.binPkgs {
 					if pkg.Store == name {
 						pkgs[pkg.Name] = pkg
 					}

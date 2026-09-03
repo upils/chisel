@@ -11,7 +11,7 @@ import (
 
 type TestStore struct {
 	Opts     store.Options
-	Packages map[string]*TestPackage
+	Packages map[string]*BinPackage
 }
 
 func (s *TestStore) Options() *store.Options {
@@ -23,10 +23,5 @@ func (s *TestStore) Fetch(name, track, risk string) (io.ReadSeekCloser, manifest
 	if !ok {
 		return nil, nil, fmt.Errorf("cannot find package %q in store", name)
 	}
-	info := &store.PackageInfo{
-		Name:    pkg.Name,
-		Version: pkg.Version,
-		SHA384:  pkg.Hash,
-	}
-	return ReadSeekNopCloser(bytes.NewReader(pkg.Data)), info, nil
+	return ReadSeekNopCloser(bytes.NewReader(pkg.Data)), pkg.info(), nil
 }
