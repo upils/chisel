@@ -8,6 +8,7 @@ import (
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/setup"
+	"github.com/canonical/chisel/internal/store"
 )
 
 // Fetcher fetches a package from the location selected for it in the
@@ -38,17 +39,18 @@ func (d *debFetcher) Fetch() (io.ReadSeekCloser, manifestutil.PackageInfo, error
 
 // binFetcher fetches bin packages from a store.
 type binFetcher struct {
-	arch  string
 	name  string
-	store string
+	store store.Store
+	track string
+	risk  string
 }
 
 func (b *binFetcher) Arch() string {
-	return b.arch
+	return b.store.Options().Arch
 }
 
 func (b *binFetcher) Fetch() (io.ReadSeekCloser, manifestutil.PackageInfo, error) {
-	return nil, nil, fmt.Errorf("cannot fetch package %q from store %q: not implemented", b.name, b.store)
+	return b.store.Fetch(b.name, b.track, b.risk)
 }
 
 // selectPkgFetchers determines the fetcher for each package in the selection.
@@ -57,7 +59,7 @@ func (b *binFetcher) Fetch() (io.ReadSeekCloser, manifestutil.PackageInfo, error
 // slice definition file. For packages from a store it selects the store
 // named in the slice definition file. It returns a map of Fetcher indexed
 // by package names.
-func selectPkgFetchers(archives map[string]archive.Archive, selection *setup.Selection) (map[string]Fetcher, error) {
+func selectPkgFetchers(archives map[string]archive.Archive, stores map[string]store.Store, selection *setup.Selection) (map[string]Fetcher, error) {
 	sortedArchives := make([]*setup.Archive, 0, len(selection.Release.Archives))
 	for _, archive := range selection.Release.Archives {
 		if archive.Priority < 0 {
@@ -78,11 +80,20 @@ func selectPkgFetchers(archives map[string]archive.Archive, selection *setup.Sel
 		}
 		pkg := selection.Release.Packages[s.Package]
 		if pkg.Store != "" {
+			storeHandle := stores[pkg.Store]
+			if storeHandle == nil {
+				return nil, fmt.Errorf("internal error: no store handle for store %q", pkg.Store)
+			}
+
 			fetchers[pkg.Name] = &binFetcher{
-				name:  pkg.Name,
-				store: pkg.Store,
-				// TODO: populate arch, track and risk when implementing
-				// fetching from the store.
+				name:  pkg.RealName,
+				store: storeHandle,
+				// The store channel track is "<default-track>-<store version>",
+				// e.g. "3.1-26.10". The version pins the release series.
+				track: pkg.DefaultTrack + "-" + storeHandle.Options().Version,
+				// TODO: Risk is left empty for now; the store applies its default.
+				// In the future the risk will optionnaly come from the CLI.
+				risk: "",
 			}
 			continue
 		}
