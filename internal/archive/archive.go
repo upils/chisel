@@ -26,10 +26,10 @@ type Archive interface {
 }
 
 type PackageInfo struct {
-	Name     string
-	Version  string
-	Arch     string
-	SHA256   string
+	Name    string
+	Version string
+	Arch    string
+	SHA256  string
 }
 
 func (p *PackageInfo) PkgName() string                 { return p.Name }
