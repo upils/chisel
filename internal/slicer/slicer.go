@@ -24,7 +24,7 @@ import (
 	"github.com/canonical/chisel/internal/tarball"
 )
 
-const manifestMode fs.FileMode = 0o644
+const manifestMode fs.FileMode = 0644
 
 type RunOptions struct {
 	Selection *setup.Selection
@@ -242,8 +242,9 @@ func Run(options *RunOptions) error {
 			continue
 		}
 		pkg := options.Selection.Release.Packages[slice.Package]
-		// Store packages are distributed as plain tarballs, whose extraction
-		// is not yet implemented. Fail until the format support is in place.
+		// Store packages are distributed as XZ-compress tarballs, whose
+		// extraction is not yet implemented. Fail until the format support
+		// is in place.
 		if pkg.Store != "" {
 			return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", pkg.RealName)
 		}
