@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/slicer"
+	"github.com/canonical/chisel/internal/store"
 )
 
 var shortCutHelp = "Cut a tree with selected slices"
@@ -121,9 +123,29 @@ func (cmd *cmdCut) Execute(args []string) error {
 		}
 	}
 
+	stores := make(map[string]store.Store)
+	for storeName, storeInfo := range release.Stores {
+		openStore, err := store.Open(&store.Options{
+			Arch:     cmd.Arch,
+			CacheDir: cache.DefaultDir("chisel"),
+			Kind:     storeInfo.Kind,
+			Version:  storeInfo.Version,
+		})
+		if err != nil {
+			var unknownStoreKindError *store.UnknownStoreKindError
+			if errors.As(err, &unknownStoreKindError) {
+				logf("Store %q ignored: %v", storeName, err)
+				continue
+			}
+			return err
+		}
+		stores[storeName] = openStore
+	}
+
 	err = slicer.Run(&slicer.RunOptions{
 		Selection: selection,
 		Archives:  archives,
+		Stores:    stores,
 		TargetDir: cmd.RootDir,
 	})
 	return err
