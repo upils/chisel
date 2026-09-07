@@ -1522,6 +1522,7 @@ var slicerTests = []slicerTest{{
 }, {
 	summary: "Hard link entries can be extracted without extracting the regular file",
 	slices: []setup.SliceKey{
+		{"test-package", "myslice"}},
 	debPkgs: []*testutil.DebPackage{{
 		Name: "test-package",
 		Data: testutil.MustMakeDeb([]testutil.TarEntry{
