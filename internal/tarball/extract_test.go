@@ -18,7 +18,6 @@ import (
 type extractTest struct {
 	summary string
 	pkgdata []byte
-	format  tarball.Format
 	options tarball.ExtractOptions
 	hackopt func(c *C, o *tarball.ExtractOptions)
 	result  map[string]string
