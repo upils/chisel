@@ -1236,8 +1236,9 @@ func (s *S) testOpenArchiveArch(c *C, test realArchiveTest, arch string) {
 	c.Assert(info.Name, DeepEquals, test.pkg)
 	c.Assert(info.Arch, DeepEquals, arch)
 
-	err = tarball.Extract(pkg, deb.OpenTar, &tarball.ExtractOptions{
+	err = tarball.Extract(pkg, &tarball.ExtractOptions{
 		Package:   test.pkg,
+		Format:    tarball.DebFormat,
 		TargetDir: extractDir,
 		Extract: map[string][]tarball.ExtractInfo{
 			fmt.Sprintf("/usr/share/doc/%s/copyright", test.pkg): {

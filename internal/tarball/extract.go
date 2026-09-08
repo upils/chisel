@@ -3,6 +3,7 @@ package tarball
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"io/fs"
@@ -12,27 +13,82 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/blakesmith/ar"
+	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
 
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/strdist"
 )
 
-// TarOpener returns a reader over the uncompressed tar stream contained in
-// its input, hiding the container and compression details from Extract.
-type TarOpener func(pkgReader io.Reader) (io.ReadCloser, error)
+// Format identifies the format of a package.
+type Format string
 
-// OpenXZTar returns a reader over the decompressed XZ stream.
-func OpenXZTar(pkgReader io.Reader) (io.ReadCloser, error) {
-	xzReader, err := xz.NewReader(pkgReader)
-	if err != nil {
-		return nil, err
+const (
+	// DebFormat is the Debian package format: an ar archive holding a
+	// compressed data tarball.
+	DebFormat Format = "deb"
+	// BinFormat is the bin package format: a plain XZ-compressed tarball.
+	BinFormat Format = "bin"
+)
+
+// DataReader returns a reader over the uncompressed tar stream contained in
+// the given package, based on its format.
+func DataReader(pkgReader io.Reader, format Format) (io.ReadCloser, error) {
+	switch format {
+	case DebFormat:
+		return debDataReader(pkgReader)
+	case BinFormat:
+		xzReader, err := xz.NewReader(pkgReader)
+		if err != nil {
+			return nil, err
+		}
+		return io.NopCloser(xzReader), nil
 	}
-	return io.NopCloser(xzReader), nil
+	return nil, fmt.Errorf("internal error: unsupported package format: %q", format)
+}
+
+// debDataReader returns a reader over the data tarball contained in the ar
+// file of a Debian package.
+func debDataReader(pkgReader io.Reader) (io.ReadCloser, error) {
+	arReader := ar.NewReader(pkgReader)
+	var dataReader io.ReadCloser
+	for dataReader == nil {
+		arHeader, err := arReader.Next()
+		if err == io.EOF {
+			return nil, fmt.Errorf("no data payload")
+		}
+		if err != nil {
+			return nil, err
+		}
+		switch arHeader.Name {
+		case "data.tar.gz":
+			gzipReader, err := gzip.NewReader(arReader)
+			if err != nil {
+				return nil, err
+			}
+			dataReader = gzipReader
+		case "data.tar.xz":
+			xzReader, err := xz.NewReader(arReader)
+			if err != nil {
+				return nil, err
+			}
+			dataReader = io.NopCloser(xzReader)
+		case "data.tar.zst":
+			zstdReader, err := zstd.NewReader(arReader)
+			if err != nil {
+				return nil, err
+			}
+			dataReader = zstdReader.IOReadCloser()
+		}
+	}
+
+	return dataReader, nil
 }
 
 type ExtractOptions struct {
 	Package   string
+	Format    Format
 	TargetDir string
 	Extract   map[string][]ExtractInfo
 	// Create can optionally be set to control the creation of extracted entries.
@@ -72,7 +128,7 @@ func getValidOptions(options *ExtractOptions) (*ExtractOptions, error) {
 	return options, nil
 }
 
-func Extract(pkgReader io.ReadSeeker, opener TarOpener, options *ExtractOptions) (err error) {
+func Extract(pkgReader io.ReadSeeker, options *ExtractOptions) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot extract from package %q: %w", options.Package, err)
@@ -80,10 +136,6 @@ func Extract(pkgReader io.ReadSeeker, opener TarOpener, options *ExtractOptions)
 	}()
 
 	logf("Extracting files from package %q...", options.Package)
-
-	if opener == nil {
-		return fmt.Errorf("internal error: no tar opener provided")
-	}
 
 	validOpts, err := getValidOptions(options)
 	if err != nil {
@@ -97,11 +149,11 @@ func Extract(pkgReader io.ReadSeeker, opener TarOpener, options *ExtractOptions)
 		return err
 	}
 
-	return extractData(pkgReader, opener, validOpts)
+	return extractData(pkgReader, validOpts)
 }
 
-func extractData(pkgReader io.ReadSeeker, opener TarOpener, options *ExtractOptions) error {
-	dataReader, err := opener(pkgReader)
+func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
+	dataReader, err := DataReader(pkgReader, options.Format)
 	if err != nil {
 		return err
 	}
@@ -283,7 +335,7 @@ func extractData(pkgReader io.ReadSeeker, opener TarOpener, options *ExtractOpti
 		if err != nil {
 			return err
 		}
-		err = extractHardLinks(pkgReader, opener, extractHardLinkOptions)
+		err = extractHardLinks(pkgReader, extractHardLinkOptions)
 		if err != nil {
 			return err
 		}
@@ -317,8 +369,8 @@ type extractHardLinkOptions struct {
 
 // extractHardLinks iterates through the tarball a second time to extract the
 // hard links that were not extracted in the first pass.
-func extractHardLinks(pkgReader io.ReadSeeker, opener TarOpener, opts *extractHardLinkOptions) error {
-	dataReader, err := opener(pkgReader)
+func extractHardLinks(pkgReader io.ReadSeeker, opts *extractHardLinkOptions) error {
+	dataReader, err := DataReader(pkgReader, opts.Format)
 	if err != nil {
 		return err
 	}

@@ -13,8 +13,8 @@ import (
 
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/cache"
-	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/setup"
+	"github.com/canonical/chisel/internal/tarball"
 )
 
 var shortCheckReleaseArchivesHelp = "Check the release's archives"
@@ -150,7 +150,7 @@ func computePathObservations(release *setup.Release, archives map[string]archive
 			if err != nil {
 				return nil, err
 			}
-			dataReader, err := deb.OpenTar(pkgReader)
+			dataReader, err := tarball.DataReader(pkgReader, tarball.DebFormat)
 			if err != nil {
 				return nil, err
 			}

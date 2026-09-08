@@ -10,7 +10,6 @@ import (
 
 	. "gopkg.in/check.v1"
 
-	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/tarball"
 	"github.com/canonical/chisel/internal/testutil"
@@ -19,7 +18,7 @@ import (
 type extractTest struct {
 	summary string
 	pkgdata []byte
-	openTar tarball.TarOpener
+	format  tarball.Format
 	options tarball.ExtractOptions
 	hackopt func(c *C, o *tarball.ExtractOptions)
 	result  map[string]string
@@ -498,6 +497,9 @@ func (s *S) TestExtract(c *C) {
 		options := test.options
 		options.Package = "test-package"
 		options.TargetDir = dir
+		if options.Format == "" {
+			options.Format = tarball.DebFormat
+		}
 		createdPaths := make(map[string]bool)
 		options.Create = func(_ []tarball.ExtractInfo, o *fsutil.CreateOptions) error {
 			relPath := filepath.Clean("/" + strings.TrimPrefix(o.Path, dir))
@@ -513,11 +515,7 @@ func (s *S) TestExtract(c *C) {
 			test.hackopt(c, &options)
 		}
 
-		openTar := test.openTar
-		if openTar == nil {
-			openTar = deb.OpenTar
-		}
-		err := tarball.Extract(bytes.NewReader(test.pkgdata), openTar, &options)
+		err := tarball.Extract(bytes.NewReader(test.pkgdata), &options)
 		if test.error != "" {
 			c.Assert(err, ErrorMatches, test.error)
 			continue
@@ -545,7 +543,7 @@ func (s *S) TestExtract(c *C) {
 var extractCreateCallbackTests = []struct {
 	summary string
 	pkgdata []byte
-	openTar tarball.TarOpener
+	format  tarball.Format
 	options tarball.ExtractOptions
 	calls   map[string][]tarball.ExtractInfo
 }{{
@@ -612,6 +610,9 @@ func (s *S) TestExtractCreateCallback(c *C) {
 		options := test.options
 		options.Package = "test-package"
 		options.TargetDir = dir
+		if options.Format == "" {
+			options.Format = tarball.DebFormat
+		}
 		createExtractInfos := map[string][]tarball.ExtractInfo{}
 		options.Create = func(extractInfos []tarball.ExtractInfo, o *fsutil.CreateOptions) error {
 			if extractInfos == nil {
@@ -629,25 +630,9 @@ func (s *S) TestExtractCreateCallback(c *C) {
 			return nil
 		}
 
-		openTar := test.openTar
-		if openTar == nil {
-			openTar = deb.OpenTar
-		}
-		err := tarball.Extract(bytes.NewReader(test.pkgdata), openTar, &options)
+		err := tarball.Extract(bytes.NewReader(test.pkgdata), &options)
 		c.Assert(err, IsNil)
 
 		c.Assert(createExtractInfos, DeepEquals, test.calls)
 	}
-}
-
-func (s *S) TestExtractMissingOpenTar(c *C) {
-	options := tarball.ExtractOptions{
-		Package:   "test-package",
-		TargetDir: c.MkDir(),
-		Extract: map[string][]tarball.ExtractInfo{
-			"/dir/file": {{Path: "/dir/file"}},
-		},
-	}
-	err := tarball.Extract(bytes.NewReader(testutil.PackageData["test-package"]), nil, &options)
-	c.Assert(err, ErrorMatches, `cannot extract from package "test-package": internal error: no tar opener provided`)
 }
