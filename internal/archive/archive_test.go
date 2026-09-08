@@ -20,7 +20,6 @@ import (
 
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/archive/testarchive"
-	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/tarball"
 	"github.com/canonical/chisel/internal/testutil"
 )
