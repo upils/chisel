@@ -573,8 +573,8 @@ func (s *httpSuite) TestOpenOldReleaseFallback(c *C) {
 	_, _, err = testArchive.Fetch("mypkg1")
 	c.Assert(err, IsNil)
 
-	// Exactly one 404 (the probe to old-releases); all subsequent
-	// requests must be served by the current archive.
+	// Exactly one 404 (the InRelease fetch from old-releases); all
+	// subsequent requests must be served by the current archive.
 	oldReleasesHits := 0
 	for _, r := range s.requestResults {
 		if r.status == 404 {
