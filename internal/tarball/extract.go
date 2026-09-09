@@ -113,11 +113,11 @@ func Extract(pkgReader io.ReadSeeker, options *ExtractOptions) (err error) {
 }
 
 func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
-	dataReader, err := options.Format.TarStream(pkgReader)
+	tarStream, err := options.Format.TarStream(pkgReader)
 	if err != nil {
 		return err
 	}
-	defer dataReader.Close()
+	defer tarStream.Close()
 
 	oldUmask := syscall.Umask(0)
 	defer func() {
@@ -150,7 +150,7 @@ func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
 	// before the entry for the file itself. This is the case for the tarballs
 	// produced by common packaging tools but not for all tarballs.
 	tarDirMode := make(map[string]fs.FileMode)
-	tarReader := tar.NewReader(dataReader)
+	tarReader := tar.NewReader(tarStream)
 	for {
 		tarHeader, err := tarReader.Next()
 		if err == io.EOF {
@@ -330,13 +330,13 @@ type extractHardLinkOptions struct {
 // extractHardLinks iterates through the tarball a second time to extract the
 // hard links that were not extracted in the first pass.
 func extractHardLinks(pkgReader io.ReadSeeker, opts *extractHardLinkOptions) error {
-	dataReader, err := opts.Format.TarStream(pkgReader)
+	tarStream, err := opts.Format.TarStream(pkgReader)
 	if err != nil {
 		return err
 	}
-	defer dataReader.Close()
+	defer tarStream.Close()
 
-	tarReader := tar.NewReader(dataReader)
+	tarReader := tar.NewReader(tarStream)
 	for {
 		tarHeader, err := tarReader.Next()
 		if err == io.EOF {
