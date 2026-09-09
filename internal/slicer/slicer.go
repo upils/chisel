@@ -241,6 +241,7 @@ func Run(options *RunOptions) error {
 		}
 		err := tarball.Extract(reader, &tarball.ExtractOptions{
 			Package:   slice.Package,
+			Format:    tarball.DebFormat,
 			Extract:   extract[slice.Package],
 			TargetDir: targetDir,
 			Create:    create,

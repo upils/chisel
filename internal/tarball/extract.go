@@ -12,13 +12,43 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/ulikunitz/xz"
+
 	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/strdist"
 )
 
+// PkgFormat identifies the format of a package.
+type PkgFormat string
+
+const (
+	// DebFormat is the Debian package format: an ar archive holding a
+	// compressed data tarball.
+	DebFormat PkgFormat = "deb"
+	// BinFormat is the bin package format: a plain XZ-compressed tarball.
+	BinFormat PkgFormat = "bin"
+)
+
+// TarStream returns a reader over the raw, uncompressed tar stream contained
+// in the given package. The stream is not parsed.
+func (format PkgFormat) TarStream(pkgReader io.Reader) (io.ReadCloser, error) {
+	switch format {
+	case DebFormat:
+		return deb.DataReader(pkgReader)
+	case BinFormat:
+		xzReader, err := xz.NewReader(pkgReader)
+		if err != nil {
+			return nil, err
+		}
+		return io.NopCloser(xzReader), nil
+	}
+	return nil, fmt.Errorf("internal error: unsupported package format: %q", format)
+}
+
 type ExtractOptions struct {
 	Package   string
+	Format    PkgFormat
 	TargetDir string
 	Extract   map[string][]ExtractInfo
 	// Create can optionally be set to control the creation of extracted entries.
@@ -83,11 +113,11 @@ func Extract(pkgReader io.ReadSeeker, options *ExtractOptions) (err error) {
 }
 
 func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
-	dataReader, err := deb.DataReader(pkgReader)
+	tarStream, err := options.Format.TarStream(pkgReader)
 	if err != nil {
 		return err
 	}
-	defer dataReader.Close()
+	defer tarStream.Close()
 
 	oldUmask := syscall.Umask(0)
 	defer func() {
@@ -117,10 +147,10 @@ func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
 	// create them with the permissions defined in the tarball.
 	//
 	// The assumption is that the tar entries of the parent directories appear
-	// before the entry for the file itself. This is the case for .deb files but
-	// not for all tarballs.
+	// before the entry for the file itself. This is the case for the tarballs
+	// produced by common packaging tools but not for all tarballs.
 	tarDirMode := make(map[string]fs.FileMode)
-	tarReader := tar.NewReader(dataReader)
+	tarReader := tar.NewReader(tarStream)
 	for {
 		tarHeader, err := tarReader.Next()
 		if err == io.EOF {
@@ -300,13 +330,13 @@ type extractHardLinkOptions struct {
 // extractHardLinks iterates through the tarball a second time to extract the
 // hard links that were not extracted in the first pass.
 func extractHardLinks(pkgReader io.ReadSeeker, opts *extractHardLinkOptions) error {
-	dataReader, err := deb.DataReader(pkgReader)
+	tarStream, err := opts.Format.TarStream(pkgReader)
 	if err != nil {
 		return err
 	}
-	defer dataReader.Close()
+	defer tarStream.Close()
 
-	tarReader := tar.NewReader(dataReader)
+	tarReader := tar.NewReader(tarStream)
 	for {
 		tarHeader, err := tarReader.Next()
 		if err == io.EOF {

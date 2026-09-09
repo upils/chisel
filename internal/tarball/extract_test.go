@@ -496,6 +496,9 @@ func (s *S) TestExtract(c *C) {
 		options := test.options
 		options.Package = "test-package"
 		options.TargetDir = dir
+		if options.Format == "" {
+			options.Format = tarball.DebFormat
+		}
 		createdPaths := make(map[string]bool)
 		options.Create = func(_ []tarball.ExtractInfo, o *fsutil.CreateOptions) error {
 			relPath := filepath.Clean("/" + strings.TrimPrefix(o.Path, dir))
@@ -539,6 +542,7 @@ func (s *S) TestExtract(c *C) {
 var extractCreateCallbackTests = []struct {
 	summary string
 	pkgdata []byte
+	format  tarball.PkgFormat
 	options tarball.ExtractOptions
 	calls   map[string][]tarball.ExtractInfo
 }{{
@@ -605,6 +609,9 @@ func (s *S) TestExtractCreateCallback(c *C) {
 		options := test.options
 		options.Package = "test-package"
 		options.TargetDir = dir
+		if options.Format == "" {
+			options.Format = tarball.DebFormat
+		}
 		createExtractInfos := map[string][]tarball.ExtractInfo{}
 		options.Create = func(extractInfos []tarball.ExtractInfo, o *fsutil.CreateOptions) error {
 			if extractInfos == nil {
