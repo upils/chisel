@@ -542,7 +542,7 @@ func (s *S) TestExtract(c *C) {
 var extractCreateCallbackTests = []struct {
 	summary string
 	pkgdata []byte
-	format  tarball.Format
+	format  tarball.PkgFormat
 	options tarball.ExtractOptions
 	calls   map[string][]tarball.ExtractInfo
 }{{

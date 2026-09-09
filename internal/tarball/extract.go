@@ -19,20 +19,20 @@ import (
 	"github.com/canonical/chisel/internal/strdist"
 )
 
-// Format identifies the format of a package.
-type Format string
+// PkgFormat identifies the format of a package.
+type PkgFormat string
 
 const (
 	// DebFormat is the Debian package format: an ar archive holding a
 	// compressed data tarball.
-	DebFormat Format = "deb"
+	DebFormat PkgFormat = "deb"
 	// BinFormat is the bin package format: a plain XZ-compressed tarball.
-	BinFormat Format = "bin"
+	BinFormat PkgFormat = "bin"
 )
 
-// TarStream returns a reader over the uncompressed tar stream contained
-// in the given package.
-func (format Format) TarStream(pkgReader io.Reader) (io.ReadCloser, error) {
+// TarStream returns a reader over the raw, uncompressed tar stream contained
+// in the given package. The stream is not parsed.
+func (format PkgFormat) TarStream(pkgReader io.Reader) (io.ReadCloser, error) {
 	switch format {
 	case DebFormat:
 		return deb.DataReader(pkgReader)
@@ -48,7 +48,7 @@ func (format Format) TarStream(pkgReader io.Reader) (io.ReadCloser, error) {
 
 type ExtractOptions struct {
 	Package   string
-	Format    Format
+	Format    PkgFormat
 	TargetDir string
 	Extract   map[string][]ExtractInfo
 	// Create can optionally be set to control the creation of extracted entries.
