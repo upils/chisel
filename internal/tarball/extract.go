@@ -30,9 +30,9 @@ const (
 	BinFormat Format = "bin"
 )
 
-// DataReader returns a reader over the uncompressed tar stream contained in
-// the given package, based on its format.
-func DataReader(pkgReader io.Reader, format Format) (io.ReadCloser, error) {
+// TarStream returns a reader over the uncompressed tar stream contained
+// in the given package.
+func (format Format) TarStream(pkgReader io.Reader) (io.ReadCloser, error) {
 	switch format {
 	case DebFormat:
 		return deb.DataReader(pkgReader)
@@ -113,7 +113,7 @@ func Extract(pkgReader io.ReadSeeker, options *ExtractOptions) (err error) {
 }
 
 func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
-	dataReader, err := DataReader(pkgReader, options.Format)
+	dataReader, err := options.Format.TarStream(pkgReader)
 	if err != nil {
 		return err
 	}
@@ -330,7 +330,7 @@ type extractHardLinkOptions struct {
 // extractHardLinks iterates through the tarball a second time to extract the
 // hard links that were not extracted in the first pass.
 func extractHardLinks(pkgReader io.ReadSeeker, opts *extractHardLinkOptions) error {
-	dataReader, err := DataReader(pkgReader, opts.Format)
+	dataReader, err := opts.Format.TarStream(pkgReader)
 	if err != nil {
 		return err
 	}

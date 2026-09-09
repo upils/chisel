@@ -150,7 +150,7 @@ func computePathObservations(release *setup.Release, archives map[string]archive
 			if err != nil {
 				return nil, err
 			}
-			dataReader, err := tarball.DataReader(pkgReader, tarball.DebFormat)
+			dataReader, err := tarball.DebFormat.TarStream(pkgReader)
 			if err != nil {
 				return nil, err
 			}
