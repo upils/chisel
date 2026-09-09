@@ -3,7 +3,6 @@ package tarball
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,10 +12,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/blakesmith/ar"
-	"github.com/klauspost/compress/zstd"
 	"github.com/ulikunitz/xz"
 
+	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/strdist"
 )
@@ -37,7 +35,7 @@ const (
 func DataReader(pkgReader io.Reader, format Format) (io.ReadCloser, error) {
 	switch format {
 	case DebFormat:
-		return debDataReader(pkgReader)
+		return deb.DataReader(pkgReader)
 	case BinFormat:
 		xzReader, err := xz.NewReader(pkgReader)
 		if err != nil {
@@ -46,44 +44,6 @@ func DataReader(pkgReader io.Reader, format Format) (io.ReadCloser, error) {
 		return io.NopCloser(xzReader), nil
 	}
 	return nil, fmt.Errorf("internal error: unsupported package format: %q", format)
-}
-
-// debDataReader returns a reader over the data tarball contained in the ar
-// file of a Debian package.
-func debDataReader(pkgReader io.Reader) (io.ReadCloser, error) {
-	arReader := ar.NewReader(pkgReader)
-	var dataReader io.ReadCloser
-	for dataReader == nil {
-		arHeader, err := arReader.Next()
-		if err == io.EOF {
-			return nil, fmt.Errorf("no data payload")
-		}
-		if err != nil {
-			return nil, err
-		}
-		switch arHeader.Name {
-		case "data.tar.gz":
-			gzipReader, err := gzip.NewReader(arReader)
-			if err != nil {
-				return nil, err
-			}
-			dataReader = gzipReader
-		case "data.tar.xz":
-			xzReader, err := xz.NewReader(arReader)
-			if err != nil {
-				return nil, err
-			}
-			dataReader = io.NopCloser(xzReader)
-		case "data.tar.zst":
-			zstdReader, err := zstd.NewReader(arReader)
-			if err != nil {
-				return nil, err
-			}
-			dataReader = zstdReader.IOReadCloser()
-		}
-	}
-
-	return dataReader, nil
 }
 
 type ExtractOptions struct {
