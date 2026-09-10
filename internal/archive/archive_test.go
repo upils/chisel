@@ -536,16 +536,12 @@ func (s *httpSuite) TestOpenUnmaintainedArchives(c *C) {
 	c.Assert(err, IsNil)
 }
 
-// TestOpenOldReleaseFallback verifies that when OldRelease is set and the
-// old-releases mirror returns 404 (because the release has not yet been
-// physically moved), Chisel uses the current archive.
 func (s *httpSuite) TestOpenOldReleaseFallback(c *C) {
 	s.prepareArchive("plucky", "25.04", "amd64", []string{"main"})
 
-	// Override Do: return 404 for old-releases, delegate to s.Do (which
-	// serves the prepared content) for the current archive.
-	s.restore()
-	s.restore = archive.FakeDo(func(req *http.Request) (*http.Response, error) {
+	// The old-releases mirror 404s the release (it has not been physically
+	// moved yet); the current archive serves the prepared content.
+	do := func(req *http.Request) (*http.Response, error) {
 		if strings.HasPrefix(req.URL.String(), "http://old-releases.ubuntu.com/ubuntu/") {
 			s.requestResults = append(s.requestResults, requestResult{path: req.URL.Path, status: 404})
 			return &http.Response{
@@ -554,7 +550,9 @@ func (s *httpSuite) TestOpenOldReleaseFallback(c *C) {
 			}, nil
 		}
 		return s.Do(req)
-	})
+	}
+	restoreDo := archive.FakeDo(do)
+	defer restoreDo()
 
 	options := archive.Options{
 		Label:      "ubuntu",
@@ -582,6 +580,36 @@ func (s *httpSuite) TestOpenOldReleaseFallback(c *C) {
 		}
 	}
 	c.Assert(oldReleasesHits, Equals, 1)
+}
+
+func (s *httpSuite) TestOpenOldReleaseNotFound(c *C) {
+	// No candidate archive distributes the release: accept requests from
+	// any host and 404 them all.
+	s.base = ""
+	s.status = 404
+
+	options := archive.Options{
+		Label:      "ubuntu",
+		Version:    "25.04",
+		Arch:       "amd64",
+		Suites:     []string{"plucky"},
+		Components: []string{"main"},
+		CacheDir:   c.MkDir(),
+		PubKeys:    []*packet.PublicKey{s.pubKey},
+		OldRelease: true,
+	}
+
+	_, err := archive.Open(&options)
+	c.Assert(err, ErrorMatches, "cannot find archive data")
+
+	// Both candidates must have been tried, one InRelease fetch each.
+	suites := 0
+	for _, r := range s.requestResults {
+		if strings.HasSuffix(r.path, "/dists/plucky/InRelease") {
+			suites++
+		}
+	}
+	c.Assert(suites, Equals, 2)
 }
 
 type verifyArchiveReleaseTest struct {
