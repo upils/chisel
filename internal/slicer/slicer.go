@@ -16,6 +16,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/canonical/chisel/internal/archive"
+	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/scripts"
@@ -239,9 +240,8 @@ func Run(options *RunOptions) error {
 		if reader == nil {
 			continue
 		}
-		err := tarball.Extract(reader, &tarball.ExtractOptions{
+		err := tarball.Extract(deb.OpenPkg(reader), &tarball.ExtractOptions{
 			Package:   slice.Package,
-			Format:    tarball.DebFormat,
 			Extract:   extract[slice.Package],
 			TargetDir: targetDir,
 			Create:    create,

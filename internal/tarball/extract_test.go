@@ -10,6 +10,7 @@ import (
 
 	. "gopkg.in/check.v1"
 
+	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/tarball"
 	"github.com/canonical/chisel/internal/testutil"
@@ -496,9 +497,6 @@ func (s *S) TestExtract(c *C) {
 		options := test.options
 		options.Package = "test-package"
 		options.TargetDir = dir
-		if options.Format == "" {
-			options.Format = tarball.DebFormat
-		}
 		createdPaths := make(map[string]bool)
 		options.Create = func(_ []tarball.ExtractInfo, o *fsutil.CreateOptions) error {
 			relPath := filepath.Clean("/" + strings.TrimPrefix(o.Path, dir))
@@ -514,7 +512,7 @@ func (s *S) TestExtract(c *C) {
 			test.hackopt(c, &options)
 		}
 
-		err := tarball.Extract(bytes.NewReader(test.pkgdata), &options)
+		err := tarball.Extract(deb.OpenPkg(testutil.ReadSeekNopCloser(bytes.NewReader(test.pkgdata))), &options)
 		if test.error != "" {
 			c.Assert(err, ErrorMatches, test.error)
 			continue
@@ -542,7 +540,6 @@ func (s *S) TestExtract(c *C) {
 var extractCreateCallbackTests = []struct {
 	summary string
 	pkgdata []byte
-	format  tarball.PkgFormat
 	options tarball.ExtractOptions
 	calls   map[string][]tarball.ExtractInfo
 }{{
@@ -609,9 +606,6 @@ func (s *S) TestExtractCreateCallback(c *C) {
 		options := test.options
 		options.Package = "test-package"
 		options.TargetDir = dir
-		if options.Format == "" {
-			options.Format = tarball.DebFormat
-		}
 		createExtractInfos := map[string][]tarball.ExtractInfo{}
 		options.Create = func(extractInfos []tarball.ExtractInfo, o *fsutil.CreateOptions) error {
 			if extractInfos == nil {
@@ -629,7 +623,7 @@ func (s *S) TestExtractCreateCallback(c *C) {
 			return nil
 		}
 
-		err := tarball.Extract(bytes.NewReader(test.pkgdata), &options)
+		err := tarball.Extract(deb.OpenPkg(testutil.ReadSeekNopCloser(bytes.NewReader(test.pkgdata))), &options)
 		c.Assert(err, IsNil)
 
 		c.Assert(createExtractInfos, DeepEquals, test.calls)

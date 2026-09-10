@@ -12,43 +12,20 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/ulikunitz/xz"
-
-	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/strdist"
 )
 
-// PkgFormat identifies the format of a package.
-type PkgFormat string
-
-const (
-	// DebFormat is the Debian package format: an ar archive holding a
-	// compressed data tarball.
-	DebFormat PkgFormat = "deb"
-	// BinFormat is the bin package format: a plain XZ-compressed tarball.
-	BinFormat PkgFormat = "bin"
-)
-
-// TarStream returns a reader over the raw, uncompressed tar stream contained
-// in the given package. The stream is not parsed.
-func (format PkgFormat) TarStream(pkgReader io.Reader) (io.ReadCloser, error) {
-	switch format {
-	case DebFormat:
-		return deb.DataReader(pkgReader)
-	case BinFormat:
-		xzReader, err := xz.NewReader(pkgReader)
-		if err != nil {
-			return nil, err
-		}
-		return io.NopCloser(xzReader), nil
-	}
-	return nil, fmt.Errorf("internal error: unsupported package format: %q", format)
+// PkgReader provides the tar stream of a package. TarStream reads from
+// the current position, which the caller controls through Seek.
+type PkgReader interface {
+	// TarStream returns a reader over the raw, unparsed tar stream.
+	TarStream() (io.ReadCloser, error)
+	io.Seeker
 }
 
 type ExtractOptions struct {
 	Package   string
-	Format    PkgFormat
 	TargetDir string
 	Extract   map[string][]ExtractInfo
 	// Create can optionally be set to control the creation of extracted entries.
@@ -88,7 +65,7 @@ func getValidOptions(options *ExtractOptions) (*ExtractOptions, error) {
 	return options, nil
 }
 
-func Extract(pkgReader io.ReadSeeker, options *ExtractOptions) (err error) {
+func Extract(pkg PkgReader, options *ExtractOptions) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot extract from package %q: %w", options.Package, err)
@@ -109,11 +86,11 @@ func Extract(pkgReader io.ReadSeeker, options *ExtractOptions) (err error) {
 		return err
 	}
 
-	return extractData(pkgReader, validOpts)
+	return extractData(pkg, validOpts)
 }
 
-func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
-	tarStream, err := options.Format.TarStream(pkgReader)
+func extractData(pkg PkgReader, options *ExtractOptions) error {
+	tarStream, err := pkg.TarStream()
 	if err != nil {
 		return err
 	}
@@ -291,11 +268,11 @@ func extractData(pkgReader io.ReadSeeker, options *ExtractOptions) error {
 			ExtractOptions: options,
 			pendingLinks:   pendingHardLinks,
 		}
-		_, err := pkgReader.Seek(0, io.SeekStart)
+		_, err := pkg.Seek(0, io.SeekStart)
 		if err != nil {
 			return err
 		}
-		err = extractHardLinks(pkgReader, extractHardLinkOptions)
+		err = extractHardLinks(pkg, extractHardLinkOptions)
 		if err != nil {
 			return err
 		}
@@ -329,8 +306,8 @@ type extractHardLinkOptions struct {
 
 // extractHardLinks iterates through the tarball a second time to extract the
 // hard links that were not extracted in the first pass.
-func extractHardLinks(pkgReader io.ReadSeeker, opts *extractHardLinkOptions) error {
-	tarStream, err := opts.Format.TarStream(pkgReader)
+func extractHardLinks(pkg PkgReader, opts *extractHardLinkOptions) error {
+	tarStream, err := pkg.TarStream()
 	if err != nil {
 		return err
 	}
