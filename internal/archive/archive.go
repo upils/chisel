@@ -289,12 +289,14 @@ func openUbuntu(options *Options) (Archive, error) {
 			creds:   creds,
 		}
 		err := archive.setupIndexes()
-		if err == nil {
-			return archive, nil
+		if err == errNotFound {
+			// Release not in this archive, try the next candidate.
+			continue
 		}
-		if err != errNotFound {
+		if err != nil {
 			return nil, err
 		}
+		return archive, nil
 	}
 	return nil, errNotFound
 }
