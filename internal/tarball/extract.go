@@ -16,12 +16,12 @@ import (
 	"github.com/canonical/chisel/internal/strdist"
 )
 
-// PkgReader provides the tar stream of a package. TarStream reads from
-// the current position, which the caller controls through Seek.
+// PkgReader provides the tar stream of a package. TarStream must 
+// always provide a fresh reader, from the start.
 type PkgReader interface {
 	// TarStream returns a reader over the raw, unparsed tar stream.
 	TarStream() (io.ReadCloser, error)
-	io.Seeker
+	io.Closer
 }
 
 type ExtractOptions struct {
@@ -267,10 +267,6 @@ func extractData(pkg PkgReader, options *ExtractOptions) error {
 		extractHardLinkOptions := &extractHardLinkOptions{
 			ExtractOptions: options,
 			pendingLinks:   pendingHardLinks,
-		}
-		_, err := pkg.Seek(0, io.SeekStart)
-		if err != nil {
-			return err
 		}
 		err = extractHardLinks(pkg, extractHardLinkOptions)
 		if err != nil {

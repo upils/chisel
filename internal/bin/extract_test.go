@@ -1,8 +1,8 @@
 package bin_test
 
 import (
+	"archive/tar"
 	"bytes"
-	"io"
 
 	. "gopkg.in/check.v1"
 
@@ -21,18 +21,16 @@ func (s *S) TestPkgTarStream(c *C) {
 			testutil.Reg(0o644, "./file", "content"),
 		}))))
 
-	tarStream, err := pkg.TarStream()
-	c.Assert(err, IsNil)
-	err = tarStream.Close()
-	c.Assert(err, IsNil)
-
-	// A second stream can be obtained after rewinding.
-	_, err = pkg.Seek(0, io.SeekStart)
-	c.Assert(err, IsNil)
-	tarStream, err = pkg.TarStream()
-	c.Assert(err, IsNil)
-	err = tarStream.Close()
-	c.Assert(err, IsNil)
+	// Each call returns a fresh stream over the same content.
+	for i := 0; i < 2; i++ {
+		tarStream, err := pkg.TarStream()
+		c.Assert(err, IsNil)
+		tarReader := tar.NewReader(tarStream)
+		_, err = tarReader.Next()
+		c.Assert(err, IsNil)
+		err = tarStream.Close()
+		c.Assert(err, IsNil)
+	}
 }
 
 func (s *S) TestPkgTarStreamInvalid(c *C) {

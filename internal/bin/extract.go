@@ -20,15 +20,15 @@ func OpenPkg(reader io.ReadSeekCloser) *Pkg {
 // TarStream returns a reader over the tar stream of the bin package,
 // reading from the current position.
 func (p *Pkg) TarStream() (io.ReadCloser, error) {
+	_, err := p.reader.Seek(0, io.SeekStart)
+	if err != nil {
+		return nil, err
+	}
 	xzReader, err := xz.NewReader(p.reader)
 	if err != nil {
 		return nil, err
 	}
 	return io.NopCloser(xzReader), nil
-}
-
-func (p *Pkg) Seek(offset int64, whence int) (int64, error) {
-	return p.reader.Seek(offset, whence)
 }
 
 func (p *Pkg) Close() error {
