@@ -93,7 +93,7 @@ func (e *UnknownStoreKindError) Error() string {
 	return fmt.Sprintf("unsupported store kind %q", e.kind)
 }
 
-const ubuntuOS = "ubuntu"
+const ubuntuDistro = "ubuntu"
 
 func Open(options *Options) (Store, error) {
 	var err error
@@ -122,7 +122,7 @@ func Open(options *Options) (Store, error) {
 			cache:        &cache.Cache{Dir: options.CacheDir},
 			apiURL:       apiURL,
 			downloadHost: downloadHost,
-			os:           ubuntuOS + "-" + options.Version,
+			os:           ubuntuDistro + "-" + options.Version,
 		}, nil
 	default:
 		return nil, &UnknownStoreKindError{kind: options.Kind}
