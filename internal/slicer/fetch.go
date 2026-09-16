@@ -88,9 +88,7 @@ func selectPkgFetchers(archives map[string]archive.Archive, stores map[string]st
 			fetchers[pkg.Name] = &binFetcher{
 				name:  pkg.RealName,
 				store: storeHandle,
-				// The store channel track is "<default-track>-<store version>",
-				// e.g. "3.1-26.10". The version pins the release series.
-				track: pkg.DefaultTrack + "-" + storeHandle.Options().Version,
+				track: pkg.DefaultTrack,
 				// TODO: Risk is left empty for now; the store applies its default.
 				// In the future the risk will optionnaly come from the CLI.
 				risk: "",

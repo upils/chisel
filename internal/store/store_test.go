@@ -93,7 +93,8 @@ func makeResolveBody(opts resolveBodyOptions) []byte {
 						"name": %q,
 						"risk": %q,
 						"track": %q,
-						"platform": {"architecture": %q}
+						"os": "ubuntu-26.10",
+						"architecture": %q
 					},
 					"revision": {
 						"version": %q,
@@ -176,15 +177,19 @@ func (s *storeSuite) TestOpenOptionErrors(c *C) {
 		error   string
 	}{{
 		summary: "Valid amd64",
-		options: store.Options{Arch: "amd64", CacheDir: s.cacheDir, Kind: "bin"},
+		options: store.Options{Arch: "amd64", CacheDir: s.cacheDir, Kind: "bin", Version: "26.10"},
 	}, {
 		summary: "Invalid architecture",
-		options: store.Options{Arch: "invalid", CacheDir: s.cacheDir, Kind: "bin"},
+		options: store.Options{Arch: "invalid", CacheDir: s.cacheDir, Kind: "bin", Version: "26.10"},
 		error:   "invalid package architecture: invalid",
 	}, {
 		summary: "Unsupported store kind",
-		options: store.Options{Arch: "amd64", CacheDir: s.cacheDir, Kind: "snap"},
+		options: store.Options{Arch: "amd64", CacheDir: s.cacheDir, Kind: "snap", Version: "26.10"},
 		error:   `unsupported store kind "snap"`,
+	}, {
+		summary: "Missing version",
+		options: store.Options{Arch: "amd64", CacheDir: s.cacheDir, Kind: "bin"},
+		error:   "store options missing version",
 	}}
 	for _, test := range tests {
 		c.Logf("Summary: %s", test.summary)
@@ -270,6 +275,7 @@ func (s *storeSuite) TestFetch(c *C) {
 			Arch:     "amd64",
 			CacheDir: s.cacheDir,
 			Kind:     "bin",
+			Version:  "26.10",
 		})
 		c.Assert(err, IsNil)
 
@@ -312,7 +318,8 @@ func (s *storeSuite) TestResolveRequest(c *C) {
 		c.Assert(pkg["namespace"], Equals, "bin")
 		c.Assert(pkg["name"], Equals, "curl")
 		c.Assert(pkg["channel"], Equals, "latest/stable")
-		c.Assert(pkg["platform"].(map[string]any)["architecture"], Equals, "amd64")
+		c.Assert(pkg["os"], Equals, "ubuntu-26.10")
+		c.Assert(pkg["architecture"], Equals, "amd64")
 
 		return &http.Response{
 			StatusCode: 200,
@@ -324,6 +331,7 @@ func (s *storeSuite) TestResolveRequest(c *C) {
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
 		Kind:     "bin",
+		Version:  "26.10",
 	})
 	c.Assert(err, IsNil)
 
@@ -360,6 +368,7 @@ func (s *storeSuite) TestFetchCacheMiss(c *C) {
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
 		Kind:     "bin",
+		Version:  "26.10",
 	})
 	c.Assert(err, IsNil)
 
@@ -413,6 +422,7 @@ func (s *storeSuite) TestFetchCacheHit(c *C) {
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
 		Kind:     "bin",
+		Version:  "26.10",
 	})
 	c.Assert(err, IsNil)
 
@@ -449,6 +459,7 @@ func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
 		Kind:     "bin",
+		Version:  "26.10",
 	})
 	c.Assert(err, IsNil)
 
@@ -464,6 +475,7 @@ func (s *storeSuite) TestStagingEnvVar(c *C) {
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
 		Kind:     "bin",
+		Version:  "26.10",
 	})
 	c.Assert(err, IsNil)
 
@@ -519,6 +531,7 @@ func (s *storeSuite) TestFetchDownloadError(c *C) {
 		Arch:     "amd64",
 		CacheDir: s.cacheDir,
 		Kind:     "bin",
+		Version:  "26.10",
 	})
 	c.Assert(err, IsNil)
 
