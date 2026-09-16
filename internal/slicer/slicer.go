@@ -20,6 +20,7 @@ import (
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/scripts"
 	"github.com/canonical/chisel/internal/setup"
+	"github.com/canonical/chisel/internal/store"
 	"github.com/canonical/chisel/internal/tarball"
 )
 
@@ -28,6 +29,7 @@ const manifestMode fs.FileMode = 0644
 type RunOptions struct {
 	Selection *setup.Selection
 	Archives  map[string]archive.Archive
+	Stores    map[string]store.Store
 	TargetDir string
 }
 
@@ -90,7 +92,7 @@ func Run(options *RunOptions) error {
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
-	pkgFetchers, err := selectPkgFetchers(options.Archives, options.Selection)
+	pkgFetchers, err := selectPkgFetchers(options.Archives, options.Stores, options.Selection)
 	if err != nil {
 		return err
 	}
@@ -238,6 +240,13 @@ func Run(options *RunOptions) error {
 		reader := packages[slice.Package]
 		if reader == nil {
 			continue
+		}
+		pkg := options.Selection.Release.Packages[slice.Package]
+		// Store packages are distributed as XZ-compress tarballs, whose
+		// extraction is not yet implemented. Fail until the format support
+		// is in place.
+		if pkg.Store != "" {
+			return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", pkg.RealName)
 		}
 		err := tarball.Extract(reader, &tarball.ExtractOptions{
 			Package:   slice.Package,
