@@ -1,7 +1,6 @@
 package tarball_test
 
 import (
-	"bytes"
 	"os"
 	"path"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 
 	. "gopkg.in/check.v1"
 
-	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/tarball"
 	"github.com/canonical/chisel/internal/testutil"
@@ -18,8 +16,7 @@ import (
 
 type extractTest struct {
 	summary string
-	pkgdata []byte
-	openTar tarball.TarOpener
+	pkg     *testutil.TestPkg
 	options tarball.ExtractOptions
 	hackopt func(c *C, o *tarball.ExtractOptions)
 	result  map[string]string
@@ -30,14 +27,14 @@ type extractTest struct {
 
 var extractTests = []extractTest{{
 	summary: "Extract nothing",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: nil,
 	},
 	result: map[string]string{},
 }, {
 	summary: "Extract a few entries",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/file": []tarball.ExtractInfo{{
@@ -71,7 +68,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Extract a few entries, nil Create closure",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/file": []tarball.ExtractInfo{{
@@ -107,7 +104,7 @@ var extractTests = []extractTest{{
 	},
 }, {
 	summary: "Copy a couple of entries elsewhere",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/file": []tarball.ExtractInfo{{
@@ -129,7 +126,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{"/foo/", "/foo/bar/"},
 }, {
 	summary: "Copy same file twice",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/file": []tarball.ExtractInfo{{
@@ -149,7 +146,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{"/dir/bar/", "/dir/foo/"},
 }, {
 	summary: "Globbing a single dir level",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/s*/": []tarball.ExtractInfo{{
@@ -164,7 +161,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Globbing for files with multiple levels at once",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/s**": []tarball.ExtractInfo{{
@@ -182,7 +179,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Globbing multiple paths",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/s**": []tarball.ExtractInfo{{
@@ -204,7 +201,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Globbing must have matching source and target",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/foo/b**": []tarball.ExtractInfo{{
@@ -215,7 +212,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": when using wildcards source and target paths must match: /foo/b\*\*`,
 }, {
 	summary: "Globbing must also have a single target",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/foo/b**": []tarball.ExtractInfo{{
@@ -228,7 +225,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": when using wildcards source and target paths must match: /foo/b\*\*`,
 }, {
 	summary: "Globbing cannot change modes",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/n**": []tarball.ExtractInfo{{
@@ -240,7 +237,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": when using wildcards source and target paths must match: /dir/n\*\*`,
 }, {
 	summary: "Missing file",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/missing-file": []tarball.ExtractInfo{{
@@ -251,7 +248,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": no content at /missing-file`,
 }, {
 	summary: "Missing directory",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/missing-dir/": []tarball.ExtractInfo{{
@@ -262,7 +259,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": no content at /missing-dir/`,
 }, {
 	summary: "Missing glob",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/missing-dir/**": []tarball.ExtractInfo{{
@@ -273,7 +270,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": no content at /missing-dir/\*\*`,
 }, {
 	summary: "Missing multiple entries",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/missing-file": []tarball.ExtractInfo{{
@@ -287,7 +284,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": no content at:\n- /missing-dir/\n- /missing-file`,
 }, {
 	summary: "Optional entries may be missing",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/": []tarball.ExtractInfo{{
@@ -309,7 +306,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Optional entries mixed in cannot be missing",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/missing-file": []tarball.ExtractInfo{{
@@ -324,11 +321,11 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": no content at /dir/missing-file`,
 }, {
 	summary: "Extract non-ASCII path and preserve parent directories permissions",
-	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
+	pkg: testutil.NewTestPkg(
 		testutil.Dir(0755, "./"),
 		testutil.Dir(0766, "./日本/"),
 		testutil.Reg(0644, "./日本/語", "whatever"),
-	}),
+	),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/日本/語": []tarball.ExtractInfo{{
@@ -343,7 +340,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Entries for same destination must have the same mode",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/": []tarball.ExtractInfo{{
@@ -358,11 +355,11 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": path /dir/ requested twice with diverging mode: 0777 != 0000`,
 }, {
 	summary: "Single hard link entry can be extracted with the content entry",
-	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
+	pkg: testutil.NewTestPkg(
 		testutil.Dir(0755, "./"),
 		testutil.Reg(0644, "./file", "text for file"),
 		testutil.Hrd(0644, "./hardlink", "./file"),
-	}),
+	),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/**": []tarball.ExtractInfo{{
@@ -377,11 +374,11 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Single hard link entry can be extracted without the content entry",
-	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
+	pkg: testutil.NewTestPkg(
 		testutil.Dir(0755, "./"),
 		testutil.Reg(0644, "./file", "text for file"),
 		testutil.Hrd(0644, "./hardlink", "./file"),
-	}),
+	),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/hardlink": []tarball.ExtractInfo{{
@@ -395,10 +392,10 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Dangling hard link",
-	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
+	pkg: testutil.NewTestPkg(
 		testutil.Dir(0755, "./"),
 		testutil.Hrd(0644, "./hardlink", "./non-existing-target"),
-	}),
+	),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/hardlink": []tarball.ExtractInfo{{
@@ -409,11 +406,11 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": cannot create hard link /hardlink: no content at /non-existing-target`,
 }, {
 	summary: "Multiple dangling hard links",
-	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
+	pkg: testutil.NewTestPkg(
 		testutil.Dir(0755, "./"),
 		testutil.Hrd(0644, "./hardlink1", "./non-existing-target"),
 		testutil.Hrd(0644, "./hardlink2", "./non-existing-target"),
-	}),
+	),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/**": []tarball.ExtractInfo{{
@@ -424,11 +421,11 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": cannot create hard link /hardlink1: no content at /non-existing-target`,
 }, {
 	summary: "Hard link does not follow the symlink",
-	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
+	pkg: testutil.NewTestPkg(
 		testutil.Dir(0755, "./"),
 		testutil.Lnk(0644, "./symlink", "./file"),
 		testutil.Hrd(0644, "./hardlink", "./symlink"),
-	}),
+	),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/**": []tarball.ExtractInfo{{
@@ -443,7 +440,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Explicit extraction overrides existing file",
-	pkgdata: testutil.PackageData["test-package"],
+	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/": []tarball.ExtractInfo{{
@@ -462,10 +459,10 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Hardlink cannot escape target directory",
-	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
+	pkg: testutil.NewTestPkg(
 		testutil.Dir(0755, "./"),
 		testutil.Hrd(0644, "./hardlink", "/etc/group"),
-	}),
+	),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/**": []tarball.ExtractInfo{{
@@ -476,10 +473,10 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": invalid link target /etc/group`,
 }, {
 	summary: "Cannot extract outside of target directory",
-	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
+	pkg: testutil.NewTestPkg(
 		testutil.Dir(0755, "./"),
 		testutil.Reg(0644, "./../file", "hijacking system file"),
-	}),
+	),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/**": []tarball.ExtractInfo{{
@@ -513,11 +510,7 @@ func (s *S) TestExtract(c *C) {
 			test.hackopt(c, &options)
 		}
 
-		openTar := test.openTar
-		if openTar == nil {
-			openTar = deb.OpenTar
-		}
-		err := tarball.Extract(bytes.NewReader(test.pkgdata), openTar, &options)
+		err := tarball.Extract(test.pkg, &options)
 		if test.error != "" {
 			c.Assert(err, ErrorMatches, test.error)
 			continue
@@ -544,17 +537,16 @@ func (s *S) TestExtract(c *C) {
 
 var extractCreateCallbackTests = []struct {
 	summary string
-	pkgdata []byte
-	openTar tarball.TarOpener
+	pkg     *testutil.TestPkg
 	options tarball.ExtractOptions
 	calls   map[string][]tarball.ExtractInfo
 }{{
 	summary: "Create is called with the set of ExtractInfo(s) that match the file",
-	pkgdata: testutil.MustMakeDeb([]testutil.TarEntry{
+	pkg: testutil.NewTestPkg(
 		testutil.Dir(0755, "./"),
 		testutil.Dir(0766, "./dir/"),
 		testutil.Reg(0644, "./dir/file", "whatever"),
-	}),
+	),
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/": []tarball.ExtractInfo{{
@@ -629,25 +621,9 @@ func (s *S) TestExtractCreateCallback(c *C) {
 			return nil
 		}
 
-		openTar := test.openTar
-		if openTar == nil {
-			openTar = deb.OpenTar
-		}
-		err := tarball.Extract(bytes.NewReader(test.pkgdata), openTar, &options)
+		err := tarball.Extract(test.pkg, &options)
 		c.Assert(err, IsNil)
 
 		c.Assert(createExtractInfos, DeepEquals, test.calls)
 	}
-}
-
-func (s *S) TestExtractMissingOpenTar(c *C) {
-	options := tarball.ExtractOptions{
-		Package:   "test-package",
-		TargetDir: c.MkDir(),
-		Extract: map[string][]tarball.ExtractInfo{
-			"/dir/file": {{Path: "/dir/file"}},
-		},
-	}
-	err := tarball.Extract(bytes.NewReader(testutil.PackageData["test-package"]), nil, &options)
-	c.Assert(err, ErrorMatches, `cannot extract from package "test-package": internal error: no tar opener provided`)
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/canonical/chisel/internal/archive"
-	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/scripts"
@@ -149,7 +148,7 @@ func Run(options *RunOptions) error {
 	}
 
 	// Fetch all packages, using the selection order.
-	packages := make(map[string]io.ReadSeekCloser)
+	packages := make(map[string]tarball.PkgReader)
 	var pkgInfos []manifestutil.PackageInfo
 	for _, slice := range options.Selection.Slices {
 		if packages[slice.Package] != nil {
@@ -242,14 +241,7 @@ func Run(options *RunOptions) error {
 		if reader == nil {
 			continue
 		}
-		pkg := options.Selection.Release.Packages[slice.Package]
-		// Store packages are distributed as XZ-compress tarballs, whose
-		// extraction is not yet implemented. Fail until the format support
-		// is in place.
-		if pkg.Store != "" {
-			return fmt.Errorf("cannot extract package %q from store: store packages are not yet supported", pkg.RealName)
-		}
-		err := tarball.Extract(reader, deb.OpenTar, &tarball.ExtractOptions{
+		err := tarball.Extract(reader, &tarball.ExtractOptions{
 			Package:   slice.Package,
 			Extract:   extract[slice.Package],
 			TargetDir: targetDir,

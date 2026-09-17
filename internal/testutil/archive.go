@@ -3,9 +3,10 @@ package testutil
 import (
 	"bytes"
 	"fmt"
-	"io"
 
 	"github.com/canonical/chisel/internal/archive"
+	"github.com/canonical/chisel/internal/deb"
+	"github.com/canonical/chisel/internal/tarball"
 )
 
 type TestArchive struct {
@@ -17,12 +18,18 @@ func (a *TestArchive) Options() *archive.Options {
 	return &a.Opts
 }
 
-func (a *TestArchive) Fetch(pkgName string) (io.ReadSeekCloser, *archive.PackageInfo, error) {
+func (a *TestArchive) Fetch(pkgName string) (tarball.PkgReader, *archive.PackageInfo, error) {
 	pkg, ok := a.Packages[pkgName]
 	if !ok {
 		return nil, nil, fmt.Errorf("cannot find package %q in archive", pkgName)
 	}
-	return ReadSeekNopCloser(bytes.NewReader(pkg.Data)), pkg.info(), nil
+	info := &archive.PackageInfo{
+		Name:    pkg.Name,
+		Version: pkg.Version,
+		SHA256:  pkg.Hash,
+		Arch:    pkg.Arch,
+	}
+	return deb.OpenPkg(ReadSeekNopCloser(bytes.NewReader(pkg.Data))), info, nil
 }
 
 func (a *TestArchive) Exists(pkg string) bool {
