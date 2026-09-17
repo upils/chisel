@@ -12,15 +12,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/canonical/chisel/internal/bin"
 	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/manifestutil"
+	"github.com/canonical/chisel/internal/tarball"
 )
 
 // Store provides access to packages from the Store API.
 type Store interface {
 	Options() *Options
-	Fetch(name, track, risk string) (io.ReadSeekCloser, manifestutil.PackageInfo, error)
+	Fetch(name, track, risk string) (tarball.PkgReader, manifestutil.PackageInfo, error)
 }
 
 type Options struct {
@@ -251,7 +253,7 @@ func (s *binStore) Options() *Options {
 	return &s.options
 }
 
-func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, manifestutil.PackageInfo, error) {
+func (s *binStore) Fetch(name, track, risk string) (tarball.PkgReader, manifestutil.PackageInfo, error) {
 	if risk == "" {
 		risk = defaultRisk
 	}
@@ -275,7 +277,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, manifestu
 	reader, err := s.cache.Open(digestKind, digest)
 	if err == nil {
 		logf("Using cached package %s", name)
-		return reader, info, nil
+		return bin.OpenPkg(reader), info, nil
 	} else if err != cache.ErrMiss {
 		return nil, nil, err
 	}
@@ -315,7 +317,7 @@ func (s *binStore) Fetch(name, track, risk string) (io.ReadSeekCloser, manifestu
 	if err != nil {
 		return nil, nil, err
 	}
-	return reader, info, nil
+	return bin.OpenPkg(reader), info, nil
 }
 
 // validateDownloadURL checks that the download URL is HTTPS and from the

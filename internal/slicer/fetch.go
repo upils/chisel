@@ -2,20 +2,20 @@ package slicer
 
 import (
 	"fmt"
-	"io"
 	"slices"
 
 	"github.com/canonical/chisel/internal/archive"
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/setup"
 	"github.com/canonical/chisel/internal/store"
+	"github.com/canonical/chisel/internal/tarball"
 )
 
 // Fetcher fetches a package from the location selected for it in the
 // release.
 type Fetcher interface {
 	Arch() string
-	Fetch() (io.ReadSeekCloser, manifestutil.PackageInfo, error)
+	Fetch() (tarball.PkgReader, manifestutil.PackageInfo, error)
 }
 
 var (
@@ -33,7 +33,7 @@ func (d *debFetcher) Arch() string {
 	return d.archive.Options().Arch
 }
 
-func (d *debFetcher) Fetch() (io.ReadSeekCloser, manifestutil.PackageInfo, error) {
+func (d *debFetcher) Fetch() (tarball.PkgReader, manifestutil.PackageInfo, error) {
 	return d.archive.Fetch(d.name)
 }
 
@@ -49,7 +49,7 @@ func (b *binFetcher) Arch() string {
 	return b.store.Options().Arch
 }
 
-func (b *binFetcher) Fetch() (io.ReadSeekCloser, manifestutil.PackageInfo, error) {
+func (b *binFetcher) Fetch() (tarball.PkgReader, manifestutil.PackageInfo, error) {
 	return b.store.Fetch(b.name, b.track, b.risk)
 }
 
