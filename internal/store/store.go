@@ -56,6 +56,7 @@ type binStore struct {
 	cache        *cache.Cache
 	apiURL       string
 	downloadHost string
+	os           string
 }
 
 const (
@@ -92,6 +93,8 @@ func (e *UnknownStoreKindError) Error() string {
 	return fmt.Sprintf("unsupported store kind %q", e.kind)
 }
 
+const ubuntuDistro = "ubuntu"
+
 func Open(options *Options) (Store, error) {
 	var err error
 	if options.Arch == "" {
@@ -101,6 +104,9 @@ func Open(options *Options) (Store, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	if options.Version == "" {
+		return nil, fmt.Errorf("store options missing version")
 	}
 
 	switch storeKind(options.Kind) {
@@ -116,6 +122,7 @@ func Open(options *Options) (Store, error) {
 			cache:        &cache.Cache{Dir: options.CacheDir},
 			apiURL:       apiURL,
 			downloadHost: downloadHost,
+			os:           ubuntuDistro + "-" + options.Version,
 		}, nil
 	default:
 		return nil, &UnknownStoreKindError{kind: options.Kind}
@@ -128,11 +135,12 @@ type resolveRequest struct {
 }
 
 type resolvePackage struct {
-	InstanceKey string      `json:"instance-key"`
-	Namespace   string      `json:"namespace"`
-	Name        string      `json:"name"`
-	Channel     string      `json:"channel"`
-	Platform    binPlatform `json:"platform"`
+	InstanceKey  string `json:"instance-key"`
+	Namespace    string `json:"namespace"`
+	Name         string `json:"name"`
+	Channel      string `json:"channel"`
+	OS           string `json:"os"`
+	Architecture string `json:"architecture"`
 }
 
 type resolveResponse struct {
@@ -154,10 +162,6 @@ type resolveEntry struct {
 	Revision binRevision `json:"revision"`
 }
 
-type binPlatform struct {
-	Architecture string `json:"architecture"`
-}
-
 type binRevision struct {
 	Version  string      `json:"version"`
 	Revision int         `json:"revision"`
@@ -171,7 +175,7 @@ type binDownload struct {
 
 // resolveRevision resolves a single package revision via the store API. It
 // returns the matching revision or an error if the package is not found or has
-// no release for the requested channel and architecture.
+// no release for the requested channel, architecture and OS series.
 func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, error) {
 	if !nameExp.MatchString(name) {
 		return nil, fmt.Errorf("invalid package name %q", name)
@@ -184,11 +188,12 @@ func (s *binStore) resolveRevision(name, track, risk string) (*binRevision, erro
 
 	reqBody, err := json.Marshal(resolveRequest{
 		Packages: []resolvePackage{{
-			InstanceKey: name,
-			Namespace:   string(storeKindBin),
-			Name:        name,
-			Channel:     track + "/" + risk,
-			Platform:    binPlatform{Architecture: s.options.Arch},
+			InstanceKey:  name,
+			Namespace:    string(storeKindBin),
+			Name:         name,
+			Channel:      track + "/" + risk,
+			OS:           s.os,
+			Architecture: s.options.Arch,
 		}},
 	})
 	if err != nil {
