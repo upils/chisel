@@ -11,8 +11,6 @@ import (
 	"github.com/canonical/chisel/internal/tarball"
 )
 
-// Fetcher fetches a package from the location selected for it in the
-// release.
 type Fetcher interface {
 	Arch() string
 	Fetch() (tarball.PkgReader, manifestutil.PackageInfo, error)
