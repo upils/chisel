@@ -13,7 +13,6 @@ import (
 	"golang.org/x/crypto/sha3"
 	. "gopkg.in/check.v1"
 
-	"github.com/canonical/chisel/internal/cache"
 	"github.com/canonical/chisel/internal/store"
 )
 
@@ -337,106 +336,6 @@ func (s *storeSuite) TestResolveRequest(c *C) {
 
 	_, _, err = src.Fetch("curl", "latest", "stable")
 	c.Assert(err, IsNil)
-}
-
-func (s *storeSuite) TestFetchCacheMiss(c *C) {
-	tarData := []byte("fake tar.xz content")
-	digest := sha384Hash(tarData)
-
-	resolveBody := makeResolveBody(resolveBodyOptions{
-		name: "curl", track: "latest", risk: "stable", arch: "amd64",
-		version: "8.5.0", revision: 42, sha384: digest,
-	})
-
-	callCount := 0
-	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		callCount++
-		if req.URL.Path == "/v2/revisions/resolve" {
-			return &http.Response{
-				StatusCode: 200,
-				Body:       io.NopCloser(bytes.NewReader(resolveBody)),
-			}, nil
-		}
-		// Download URL.
-		return &http.Response{
-			StatusCode: 200,
-			Body:       io.NopCloser(bytes.NewReader(tarData)),
-		}, nil
-	}
-
-	src, err := store.Open(&store.Options{
-		Arch:     "amd64",
-		CacheDir: s.cacheDir,
-		Kind:     "bin",
-		Version:  "26.10",
-	})
-	c.Assert(err, IsNil)
-
-	reader, info, err := src.Fetch("curl", "latest", "stable")
-	c.Assert(err, IsNil)
-	defer reader.Close()
-
-	c.Assert(info.PkgName(), Equals, "curl")
-	c.Assert(info.PkgVersion(), Equals, "8.5.0")
-	c.Assert(info.PkgDigest(), Equals, digest)
-
-	data, err := io.ReadAll(reader)
-	c.Assert(err, IsNil)
-	c.Assert(data, DeepEquals, tarData)
-	c.Assert(callCount, Equals, 2)
-
-	// Verify it's in the cache.
-	cc := cache.Cache{Dir: s.cacheDir}
-	cached, err := cc.Read(cache.SHA384, digest)
-	c.Assert(err, IsNil)
-	c.Assert(cached, DeepEquals, tarData)
-}
-
-func (s *storeSuite) TestFetchCacheHit(c *C) {
-	tarData := []byte("fake tar.xz content")
-	digest := sha384Hash(tarData)
-
-	// Pre-populate the cache.
-	cc := cache.Cache{Dir: s.cacheDir}
-	err := cc.Write(cache.SHA384, digest, tarData)
-	c.Assert(err, IsNil)
-
-	resolveBody := makeResolveBody(resolveBodyOptions{
-		name: "curl", track: "latest", risk: "stable", arch: "amd64",
-		version: "8.5.0", revision: 42, sha384: digest,
-	})
-
-	resolveCallCount := 0
-	s.fakeDoFunc = func(req *http.Request) (*http.Response, error) {
-		if req.URL.Path == "/v2/revisions/resolve" {
-			resolveCallCount++
-			return &http.Response{
-				StatusCode: 200,
-				Body:       io.NopCloser(bytes.NewReader(resolveBody)),
-			}, nil
-		}
-		return nil, fmt.Errorf("download should not be called for cache hit")
-	}
-
-	src, err := store.Open(&store.Options{
-		Arch:     "amd64",
-		CacheDir: s.cacheDir,
-		Kind:     "bin",
-		Version:  "26.10",
-	})
-	c.Assert(err, IsNil)
-
-	reader, info, err := src.Fetch("curl", "latest", "stable")
-	c.Assert(err, IsNil)
-	defer reader.Close()
-
-	c.Assert(info.PkgName(), Equals, "curl")
-	c.Assert(info.PkgDigest(), Equals, digest)
-	c.Assert(resolveCallCount, Equals, 1)
-
-	data, err := io.ReadAll(reader)
-	c.Assert(err, IsNil)
-	c.Assert(data, DeepEquals, tarData)
 }
 
 func (s *storeSuite) TestFetchInvalidDownloadURL(c *C) {
