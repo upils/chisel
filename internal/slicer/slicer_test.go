@@ -1992,7 +1992,28 @@ var slicerTests = []slicerTest{{
 						/dir/store-file:
 		`,
 	},
-	error: `cannot extract package "store-pkg" from store: store packages are not yet supported`,
+	error: `cannot fetch package "bin-curl" from store "bin": not implemented`,
+}, {
+	summary: "Store package without a resolved channel",
+	slices:  []setup.SliceKey{{"bin-curl", "bin"}},
+	release: map[string]string{
+		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
+		"slices/curl.yaml": `
+			package: curl
+			store: bin
+			default-track: "0.2"
+			slices:
+				bin:
+					contents:
+						/usr/bin/curl:
+		`,
+	},
+	// A selection built by Select always holds the channel of its store
+	// packages, so the guard is exercised by dropping it here.
+	hackopt: func(c *C, opts *slicer.RunOptions) {
+		opts.Selection.Channels = nil
+	},
+	error: `internal error: slice bin-curl_bin has no channel`,
 }}
 
 func (s *S) TestRun(c *C) {
@@ -2080,7 +2101,11 @@ func runSlicerTests(s *S, c *C, tests []slicerTest) {
 				Slice:   "manifest",
 			})
 
-			selection, err := setup.Select(release, testSlices, test.arch)
+			refs := make([]setup.SliceRef, len(testSlices))
+			for i, key := range testSlices {
+				refs[i] = setup.SliceRef{SliceKey: key}
+			}
+			selection, err := setup.Select(release, refs, test.arch)
 			c.Assert(err, IsNil)
 
 			archives := map[string]archive.Archive{}

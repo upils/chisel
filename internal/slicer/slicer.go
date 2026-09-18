@@ -92,6 +92,19 @@ func Run(options *RunOptions) error {
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
+	// The channel of every selected store package must be known, as the
+	// channel-specific entries silently apply to nothing without it, which
+	// would cut content out of the build without any error.
+	for _, slice := range options.Selection.Slices {
+		pkg := options.Selection.Release.Packages[slice.Package]
+		if pkg.Store == "" {
+			continue
+		}
+		if _, ok := options.Selection.Channels[slice.Package]; !ok {
+			return fmt.Errorf("internal error: slice %s has no channel", slice)
+		}
+	}
+
 	pkgFetchers, err := selectPkgFetchers(options.Archives, options.Stores, options.Selection)
 	if err != nil {
 		return err
@@ -111,11 +124,15 @@ func Run(options *RunOptions) error {
 			extract[slice.Package] = extractPackage
 		}
 		arch := pkgFetchers[slice.Package].Arch()
+		channel := options.Selection.Channels[slice.Package]
 		for targetPath, pathInfo := range slice.Contents {
 			if targetPath == "" {
 				continue
 			}
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
+				continue
+			}
+			if !setup.MatchChannelPatterns(pathInfo.Channel, channel) {
 				continue
 			}
 			if preferredPkg, ok := prefers[targetPath]; ok && preferredPkg.Name != slice.Package {
@@ -273,8 +290,12 @@ func Run(options *RunOptions) error {
 	relPaths := map[string][]*setup.Slice{}
 	for _, slice := range options.Selection.Slices {
 		arch := pkgFetchers[slice.Package].Arch()
+		channel := options.Selection.Channels[slice.Package]
 		for relPath, pathInfo := range slice.Contents {
 			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
+				continue
+			}
+			if !setup.MatchChannelPatterns(pathInfo.Channel, channel) {
 				continue
 			}
 			if pathInfo.Kind == setup.CopyPath || pathInfo.Kind == setup.GlobPath ||
