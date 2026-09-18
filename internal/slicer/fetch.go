@@ -82,7 +82,7 @@ func selectPkgFetchers(archives map[string]archive.Archive, stores map[string]st
 			if storeHandle == nil {
 				return nil, fmt.Errorf("internal error: no store handle for store %q", pkg.Store)
 			}
-			
+
 			var channel setup.Channel
 			var ok bool
 			channel, ok = selection.Channels[pkg.Name]
@@ -94,7 +94,7 @@ func selectPkgFetchers(archives map[string]archive.Archive, stores map[string]st
 				name:  pkg.RealName,
 				store: storeHandle,
 				track: channel.Track,
-				risk: channel.Risk,
+				risk:  channel.Risk,
 			}
 			continue
 		}
