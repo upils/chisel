@@ -1961,39 +1961,6 @@ var slicerTests = []slicerTest{{
 		"/dir/file": "file 0644 cc55e2ec {test-package_third}",
 	},
 }, {
-	summary: "Store package fetching not yet implemented",
-	slices:  []setup.SliceKey{{"test-package", "myslice"}, {"bin-store-pkg", "myslice"}},
-	arch:    "amd64",
-	debPkgs: []*testutil.DebPackage{{
-		Name: "test-package",
-		Data: testutil.PackageData["test-package"],
-	}},
-	binPkgs: []*testutil.BinPackage{{
-		Name:  "store-pkg",
-		Store: "bin",
-		Data:  testutil.PackageData["test-package"],
-	}},
-	release: map[string]string{
-		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
-		"slices/mydir/test-package.yaml": `
-			package: test-package
-			slices:
-				myslice:
-					contents:
-						/dir/file:
-		`,
-		"slices/mydir/store-pkg.yaml": `
-			package: store-pkg
-			store: bin
-			default-track: 3.1
-			slices:
-				myslice:
-					contents:
-						/dir/store-file:
-		`,
-	},
-	error: `cannot fetch package "bin-curl" from store "bin": not implemented`,
-}, {
 	summary: "Store package without a resolved channel",
 	slices:  []setup.SliceKey{{"bin-curl", "bin"}},
 	release: map[string]string{

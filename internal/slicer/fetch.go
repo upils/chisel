@@ -82,14 +82,19 @@ func selectPkgFetchers(archives map[string]archive.Archive, stores map[string]st
 			if storeHandle == nil {
 				return nil, fmt.Errorf("internal error: no store handle for store %q", pkg.Store)
 			}
+			
+			var channel setup.Channel
+			var ok bool
+			channel, ok = selection.Channels[pkg.Name]
+			if !ok {
+				channel.Track = pkg.DefaultTrack
+			}
 
 			fetchers[pkg.Name] = &binFetcher{
 				name:  pkg.RealName,
 				store: storeHandle,
-				track: pkg.DefaultTrack,
-				// TODO: Risk is left empty for now; the store applies its default.
-				// In the future the risk will optionnaly come from the CLI.
-				risk: "",
+				track: channel.Track,
+				risk: channel.Risk,
 			}
 			continue
 		}
