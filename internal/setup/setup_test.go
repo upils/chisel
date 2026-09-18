@@ -4493,67 +4493,15 @@ var setupTests = []setupTest{{
 						/dir/file: {}
 		`,
 	},
-	release: &setup.Release{
-		Format: "v3",
-		Archives: map[string]*setup.Archive{
-			"ubuntu": {
-				Name:       "ubuntu",
-				Version:    "22.04",
-				Suites:     []string{"jammy"},
-				Components: []string{"main", "universe"},
-				PubKeys:    []*packet.PublicKey{testKey.PubKey},
-				Maintained: true,
+	selection: &setup.Selection{
+		Slices: []*setup.Slice{{
+			Package: "bin-mypkg",
+			Name:    "myslice",
+			Contents: map[string]setup.PathInfo{
+				"/dir/file": {Kind: setup.CopyPath},
 			},
-		},
-		Stores: map[string]*setup.Store{
-			"bin": {
-				Name:          "bin",
-				Kind:          "bin",
-				Version:       "26.10",
-				DefaultPrefix: "bin-",
-			},
-		},
-		Maintenance: &setup.Maintenance{
-			Standard:  time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC),
-			EndOfLife: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC),
-		},
-		Packages: map[string]*setup.Package{
-			"bin-mypkg": {
-				RealName:     "mypkg",
-				Name:         "bin-mypkg",
-				Path:         "bin-slices/mypkg.yaml",
-				Store:        "bin",
-				DefaultTrack: "0.3",
-				Slices: map[string]*setup.Slice{
-					"myslice": {
-						Package: "bin-mypkg",
-						Name:    "myslice",
-						Contents: map[string]setup.PathInfo{
-							"/dir/excluded": {
-								Kind: setup.CopyPath, Arch: []string{"amd64"},
-								Channel: []string{"0.2/!stable"},
-							},
-							"/dir/listed": {
-								Kind:    setup.CopyPath,
-								Channel: []string{"0.2/beta,edge"},
-							},
-							"/dir/scalar": {
-								Kind:    setup.CopyPath,
-								Channel: []string{"0.3/stable"},
-							},
-							"/dir/union": {
-								Kind:    setup.CopyPath,
-								Channel: []string{"0.2/*", "0.3/edge"},
-							},
-							"/dir/wildcard*": {
-								Kind:    setup.GlobPath,
-								Channel: []string{"0.3/*"},
-							},
-						},
-					},
-				},
-			},
-		},
+		}},
+		Channels: map[string]setup.Channel{"bin-mypkg": {Track: "2.0", Risk: "edge"}},
 	},
 }, {
 	summary: "Channel on essentials is parsed correctly",
