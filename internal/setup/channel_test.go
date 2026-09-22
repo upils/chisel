@@ -167,8 +167,8 @@ var channelPatternTests = []struct {
 }, {
 	// The "!<risk>" form.
 	summary: "Unknown excluded risk",
-	values:  []string{"0.3/!whatever"},
-	err:     `"0.3/!whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+	values:  []string{"0.3/!invalid"},
+	err:     `"0.3/!invalid": unknown risk "invalid", must be one of stable, candidate, beta, edge`,
 }, {
 	summary: "Exclusion combined with other risks",
 	values:  []string{"0.3/!stable,edge"},
@@ -180,12 +180,12 @@ var channelPatternTests = []struct {
 }, {
 	// The "<risk>[,<risk>]" form.
 	summary: "Unknown risk",
-	values:  []string{"0.3/whatever"},
-	err:     `"0.3/whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+	values:  []string{"0.3/invalid"},
+	err:     `"0.3/invalid": unknown risk "invalid", must be one of stable, candidate, beta, edge`,
 }, {
 	summary: "Unknown risk in a list",
-	values:  []string{"0.3/edge,whatever"},
-	err:     `"0.3/edge,whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+	values:  []string{"0.3/edge,invalid"},
+	err:     `"0.3/edge,invalid": unknown risk "invalid", must be one of stable, candidate, beta, edge`,
 }, {
 	summary: "Risks are case sensitive",
 	values:  []string{"0.3/Stable"},

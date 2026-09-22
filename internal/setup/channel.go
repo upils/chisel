@@ -41,33 +41,60 @@ func (c Channel) String() string {
 	return channel
 }
 
-// parseChannel parses a "<track>[/<risk>[/<branch>]]" channel.
-// Validation is intentionally loose, the track, the risk and the branch are
-// only checked for their presence so that their values are not rejected here.
-func parseChannel(channel string) (Channel, error) {
-	if channel == "" {
+var channelRisks = []string{"stable", "candidate", "beta", "edge"}
+
+// parseChannel parses a "<track>[/<risk>[/<branch>]]" string, representing
+// a store channel.
+func parseChannel(s string) (Channel, error) {
+	if s == "" {
 		return Channel{}, errors.New("missing channel")
 	}
-	if strings.ContainsFunc(channel, unicode.IsSpace) {
+	if strings.ContainsFunc(s, unicode.IsSpace) {
 		return Channel{}, errors.New("channel must not contain spaces")
 	}
-	segments := strings.Split(channel, "/")
-	if len(segments) > 3 {
-		return Channel{}, errors.New("channel must be <track>[/<risk>[/<branch>]]")
-	}
-	for _, segment := range segments {
-		if segment == "" {
-			return Channel{}, errors.New("channel must be <track>[/<risk>[/<branch>]]")
+	p := strings.Split(s, "/")
+	var risk, track, branch *string
+	switch len(p) {
+	default:
+		return Channel{}, fmt.Errorf("channel must be <track>[/<risk>[/<branch>]]: %s", s)
+	case 3:
+		track, risk, branch = &p[0], &p[1], &p[2]
+	case 2:
+		if slices.Contains(channelRisks, p[0]) {
+			risk, branch = &p[0], &p[1]
+		} else {
+			track, risk = &p[0], &p[1]
+		}
+	case 1:
+		if slices.Contains(channelRisks, p[0]) {
+			risk = &p[0]
+		} else {
+			track = &p[0]
 		}
 	}
-	parsed := Channel{Track: segments[0]}
-	if len(segments) > 1 {
-		parsed.Risk = segments[1]
+	
+	ch := Channel{}
+
+	if risk != nil {
+		if !slices.Contains(channelRisks, *risk) {
+			return Channel{}, fmt.Errorf("invalid risk in channel name: %s", s)
+		}
+		ch.Risk = *risk
 	}
-	if len(segments) > 2 {
-		parsed.Branch = segments[2]
+	if track != nil {
+		if *track == "" {
+			return Channel{}, fmt.Errorf("invalid track in channel name: %s", s)
+		}
+		ch.Track = *track
 	}
-	return parsed, nil
+	if branch != nil {
+		if *branch == "" {
+			return Channel{}, fmt.Errorf("invalid branch in channel name: %s", s)
+		}
+		ch.Branch = *branch
+	}
+	
+	return ch, nil
 }
 
 // The form a channel pattern must take, as reported to the user.

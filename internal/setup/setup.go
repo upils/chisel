@@ -158,8 +158,7 @@ type SliceRef struct {
 	Channel  Channel
 }
 
-// ParseSliceRef parses a "pkg_slice[@channel]" reference. See parseChannel
-// for the accepted channel forms.
+// ParseSliceRef parses a "pkg_slice[@channel]" reference.
 func ParseSliceRef(ref string) (SliceRef, error) {
 	keyPart, channel, ok := strings.Cut(ref, "@")
 	if !ok {

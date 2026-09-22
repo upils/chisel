@@ -5597,11 +5597,18 @@ var parseSliceRefTests = []struct {
 		Channel:  setup.Channel{Track: "3.0", Risk: "stable"},
 	},
 }, {
-	// Validation is loose, unknown risks are accepted.
-	input: "foo_bar@3.0/whatever",
+	// A risk alone is accepted, with no track.
+	input: "foo_bar@edge",
 	expected: setup.SliceRef{
 		SliceKey: setup.SliceKey{Package: "foo", Slice: "bar"},
-		Channel:  setup.Channel{Track: "3.0", Risk: "whatever"},
+		Channel:  setup.Channel{Risk: "edge"},
+	},
+}, {
+	// A risk and a branch are accepted, with no track.
+	input: "foo_bar@beta/mybranch",
+	expected: setup.SliceRef{
+		SliceKey: setup.SliceKey{Package: "foo", Slice: "bar"},
+		Channel:  setup.Channel{Risk: "beta", Branch: "mybranch"},
 	},
 }, {
 	input: "foo-pkg_dashed-slice@3.0/beta",
@@ -5624,24 +5631,28 @@ var parseSliceRefTests = []struct {
 		Channel:  setup.Channel{Track: "3.0", Risk: "stable", Branch: "mybranch"},
 	},
 }, {
+	// Risks are validated, unknown ones are rejected.
+	input: "foo_bar@3.0/invalid",
+	err:   `invalid slice reference "foo_bar@3.0/invalid": invalid risk in channel name: 3.0/invalid`,
+}, {
 	input: "foo_bar@",
 	err:   `invalid slice reference "foo_bar@": missing channel`,
 }, {
 	input: "foo_bar@/stable",
-	err:   `invalid slice reference "foo_bar@/stable": channel must be <track>\[/<risk>\[/<branch>\]\]`,
+	err:   `invalid slice reference "foo_bar@/stable": invalid track in channel name: /stable`,
 }, {
 	input: "foo_bar@3.0/",
-	err:   `invalid slice reference "foo_bar@3.0/": channel must be <track>\[/<risk>\[/<branch>\]\]`,
+	err:   `invalid slice reference "foo_bar@3.0/": invalid risk in channel name: 3.0/`,
 }, {
 	input: "foo_bar@3.0//stable",
-	err:   `invalid slice reference "foo_bar@3.0//stable": channel must be <track>\[/<risk>\[/<branch>\]\]`,
+	err:   `invalid slice reference "foo_bar@3.0//stable": invalid risk in channel name: 3.0//stable`,
 }, {
 	input: "foo_bar@3.0/stable/",
-	err:   `invalid slice reference "foo_bar@3.0/stable/": channel must be <track>\[/<risk>\[/<branch>\]\]`,
+	err:   `invalid slice reference "foo_bar@3.0/stable/": invalid branch in channel name: 3.0/stable/`,
 }, {
 	// A branch must not contain a /, hence no more than three segments.
 	input: "foo_bar@3.0/stable/mybranch/extra",
-	err:   `invalid slice reference "foo_bar@3.0/stable/mybranch/extra": channel must be <track>\[/<risk>\[/<branch>\]\]`,
+	err:   `invalid slice reference "foo_bar@3.0/stable/mybranch/extra": channel must be <track>\[/<risk>\[/<branch>\]\]: 3.0/stable/mybranch/extra`,
 }, {
 	input: "foo_bar@3.0 stable",
 	err:   `invalid slice reference "foo_bar@3.0 stable": channel must not contain spaces`,
