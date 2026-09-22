@@ -6,6 +6,41 @@ import (
 	"github.com/canonical/chisel/internal/setup"
 )
 
+var channelStringTests = []struct {
+	summary  string
+	channel  setup.Channel
+	expected string
+}{{
+	summary:  "An unset channel renders as empty",
+	channel:  setup.Channel{},
+	expected: "",
+}, {
+	summary:  "A track and a risk",
+	channel:  setup.Channel{Track: "3.0", Risk: "stable"},
+	expected: "3.0/stable",
+}, {
+	summary:  "A branch is appended",
+	channel:  setup.Channel{Track: "3.0", Risk: "edge", Branch: "mybranch"},
+	expected: "3.0/edge/mybranch",
+}, {
+	// A channel is never built without a risk, but rendering the risk as
+	// optional would turn the branch into one, that is a different channel.
+	summary:  "A missing risk is not skipped over",
+	channel:  setup.Channel{Track: "3.0", Branch: "mybranch"},
+	expected: "3.0//mybranch",
+}, {
+	summary:  "A missing track is visible",
+	channel:  setup.Channel{Risk: "edge"},
+	expected: "/edge",
+}}
+
+func (s *S) TestChannelString(c *C) {
+	for _, test := range channelStringTests {
+		c.Logf("Summary: %s", test.summary)
+		c.Assert(test.channel.String(), Equals, test.expected)
+	}
+}
+
 // channelPatternTests covers validating and matching the patterns of a
 // "channel" field. The valid patterns come first, then the invalid ones,
 // grouped after the validation phase they exercise. Note several of the latter
@@ -132,8 +167,8 @@ var channelPatternTests = []struct {
 }, {
 	// The "!<risk>" form.
 	summary: "Unknown excluded risk",
-	values:  []string{"0.3/!whatever"},
-	err:     `"0.3/!whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+	values:  []string{"0.3/!invalid"},
+	err:     `"0.3/!invalid": unknown risk "invalid", must be one of stable, candidate, beta, edge`,
 }, {
 	summary: "Exclusion combined with other risks",
 	values:  []string{"0.3/!stable,edge"},
@@ -145,12 +180,12 @@ var channelPatternTests = []struct {
 }, {
 	// The "<risk>[,<risk>]" form.
 	summary: "Unknown risk",
-	values:  []string{"0.3/whatever"},
-	err:     `"0.3/whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+	values:  []string{"0.3/invalid"},
+	err:     `"0.3/invalid": unknown risk "invalid", must be one of stable, candidate, beta, edge`,
 }, {
 	summary: "Unknown risk in a list",
-	values:  []string{"0.3/edge,whatever"},
-	err:     `"0.3/edge,whatever": unknown risk "whatever", must be one of stable, candidate, beta, edge`,
+	values:  []string{"0.3/edge,invalid"},
+	err:     `"0.3/edge,invalid": unknown risk "invalid", must be one of stable, candidate, beta, edge`,
 }, {
 	summary: "Risks are case sensitive",
 	values:  []string{"0.3/Stable"},

@@ -147,9 +147,40 @@ func ParseSliceKey(sliceKey string) (SliceKey, error) {
 	return apacheutil.ParseSliceKey(sliceKey)
 }
 
-// DefaultRisk is used when a channel is resolved from a track alone, as done
-// for the 'default-track' of a store package.
+// DefaultRisk is used when a slice reference does not specify a risk.
 const DefaultRisk = "stable"
+
+// SliceRef is a slice reference with an optional channel for store packages.
+// The channel always holds a risk, the default one is used when the reference
+// does not specify it.
+type SliceRef struct {
+	SliceKey SliceKey
+	Channel  Channel
+}
+
+// ParseSliceRef parses a "pkg_slice[@channel]" reference.
+func ParseSliceRef(ref string) (SliceRef, error) {
+	keyPart, channel, ok := strings.Cut(ref, "@")
+	if !ok {
+		sliceKey, err := ParseSliceKey(ref)
+		if err != nil {
+			return SliceRef{}, err
+		}
+		return SliceRef{SliceKey: sliceKey}, nil
+	}
+	sliceKey, err := ParseSliceKey(keyPart)
+	if err != nil {
+		return SliceRef{}, err
+	}
+	parsed, err := parseChannel(channel)
+	if err != nil {
+		return SliceRef{}, fmt.Errorf("invalid slice reference %q: %s", ref, err)
+	}
+	if parsed.Risk == "" {
+		parsed.Risk = DefaultRisk
+	}
+	return SliceRef{SliceKey: sliceKey, Channel: parsed}, nil
+}
 
 func (s *Slice) String() string { return s.Package + "_" + s.Name }
 
@@ -507,7 +538,7 @@ func stripBase(baseDir, path string) string {
 	return strings.TrimPrefix(path, baseDir+string(filepath.Separator))
 }
 
-func Select(release *Release, slices []SliceKey, arch string) (*Selection, error) {
+func Select(release *Release, refs []SliceRef, arch string) (*Selection, error) {
 	logf("Selecting slices...")
 
 	var err error
@@ -523,12 +554,19 @@ func Select(release *Release, slices []SliceKey, arch string) (*Selection, error
 	// Select the channel of every store package, whether it is selected or
 	// not, and before ordering, because ordering depends on the channel of the
 	// packages it traverses.
-	channels := selectChannels(release)
+	channels, err := selectChannels(release, refs)
+	if err != nil {
+		return nil, err
+	}
 
 	selection := &Selection{
 		Release: release,
 	}
 
+	slices := make([]SliceKey, len(refs))
+	for i, ref := range refs {
+		slices[i] = ref.SliceKey
+	}
 	sorted, err := order(release.Packages, slices, arch, channels)
 	if err != nil {
 		return nil, err
@@ -580,15 +618,44 @@ func Select(release *Release, slices []SliceKey, arch string) (*Selection, error
 // selectChannels returns the channel of every store package of the release,
 // derived from its 'default-track' with the default risk. Note the release
 // only defines a track, the risk is implicit.
-func selectChannels(release *Release) map[string]Channel {
+//
+// It errors if a channel is set on a non-store package or if two references to
+// the same package specify different channels.
+func selectChannels(release *Release, refs []SliceRef) (map[string]Channel, error) {
 	channels := make(map[string]Channel)
+	for _, ref := range refs {
+		pkg, ok := release.Packages[ref.SliceKey.Package]
+		if !ok {
+			// Nothing to validate; the package is unknown.
+			continue
+		}
+		if pkg.Store == "" {
+			if ref.Channel != (Channel{}) {
+				return nil, fmt.Errorf("slice %s has channel but package %q is not in a store",
+					ref.SliceKey, pkg.Name)
+			}
+			continue
+		}
+		if ref.Channel == (Channel{}) {
+			continue
+		}
+		if existing, ok := channels[pkg.Name]; ok && existing != ref.Channel {
+			return nil, fmt.Errorf("slices of package %q have conflicting channels %q and %q",
+				pkg.Name, existing, ref.Channel)
+		}
+		channels[pkg.Name] = ref.Channel
+	}
 	for _, pkg := range release.Packages {
 		if pkg.Store == "" {
 			continue
 		}
+		if _, ok := channels[pkg.Name]; ok {
+			// The references take precedence over the 'default-track'.
+			continue
+		}
 		channels[pkg.Name] = Channel{Track: pkg.DefaultTrack, Risk: DefaultRisk}
 	}
-	return channels
+	return channels, nil
 }
 
 const (
