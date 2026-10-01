@@ -18,6 +18,7 @@ import (
 
 type PackageInfo interface {
 	PkgName() string
+	PkgRealName() string
 	PkgVersion() string
 	// PkgRevision further identifies the package when the source versions are
 	// not unique on their own. It returns 0 when the source does not use
@@ -84,9 +85,11 @@ func Write(options *WriteOptions, writer io.Writer) error {
 
 func manifestAddPackages(dbw *jsonwall.DBWriter, infos []PackageInfo) error {
 	for _, info := range infos {
+		name, alias := packageNames(info)
 		err := dbw.Add(&manifest.Package{
 			Kind:    "package",
-			Name:    info.PkgName(),
+			Name:    name,
+			Alias:   alias,
 			Version: info.PkgVersion(),
 			Arch:    info.PkgArch(),
 			Digest:  info.PkgDigest(),
@@ -96,6 +99,17 @@ func manifestAddPackages(dbw *jsonwall.DBWriter, infos []PackageInfo) error {
 		}
 	}
 	return nil
+}
+
+func packageNames(info PackageInfo) (name, alias string) {
+	name = info.PkgRealName()
+	if name == "" {
+		name = info.PkgName()
+	}
+	if info.PkgName() != name {
+		alias = info.PkgName()
+	}
+	return name, alias
 }
 
 func manifestAddSlices(dbw *jsonwall.DBWriter, slices []*setup.Slice) error {
@@ -168,7 +182,14 @@ func fastValidate(options *WriteOptions) (err error) {
 		if err != nil {
 			return err
 		}
-		pkgExist[pkg.PkgName()] = true
+		name, alias := packageNames(pkg)
+		if alias != "" {
+			name = alias
+		}
+		if pkgExist[name] {
+			return fmt.Errorf("package name or alias %q is used more than once", name)
+		}
+		pkgExist[name] = true
 	}
 	sliceExist := map[string]bool{}
 	for _, slice := range options.Selection {
@@ -264,7 +285,7 @@ func validateReportEntry(entry *ReportEntry) (err error) {
 }
 
 func validatePackage(pkg PackageInfo) (err error) {
-	name := pkg.PkgName()
+	name, _ := packageNames(pkg)
 	if name == "" {
 		return fmt.Errorf("package name not set")
 	}
@@ -297,7 +318,14 @@ func Validate(mfest *manifest.Manifest) (err error) {
 
 	pkgExist := map[string]bool{}
 	err = mfest.IteratePackages(func(pkg *manifest.Package) error {
-		pkgExist[pkg.Name] = true
+		name := pkg.Name
+		if pkg.Alias != "" {
+			name = pkg.Alias
+		}
+		if pkgExist[name] {
+			return fmt.Errorf("package name or alias %q is used more than once", name)
+		}
+		pkgExist[name] = true
 		return nil
 	})
 	if err != nil {
