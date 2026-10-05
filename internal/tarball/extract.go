@@ -64,7 +64,7 @@ func getValidOptions(options *ExtractOptions) (*ExtractOptions, error) {
 	return options, nil
 }
 
-func Extract(pkg TarStreamer, options *ExtractOptions) (err error) {
+func Extract(pkgReader TarStreamer, options *ExtractOptions) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot extract from package %q: %w", options.Package, err)
@@ -85,11 +85,11 @@ func Extract(pkg TarStreamer, options *ExtractOptions) (err error) {
 		return err
 	}
 
-	return extractEntries(pkg, validOpts)
+	return extractEntries(pkgReader, validOpts)
 }
 
-func extractEntries(pkg TarStreamer, options *ExtractOptions) error {
-	tarStream, err := pkg.TarStream()
+func extractEntries(pkgReader TarStreamer, options *ExtractOptions) error {
+	tarStream, err := pkgReader.TarStream()
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func extractEntries(pkg TarStreamer, options *ExtractOptions) error {
 			ExtractOptions: options,
 			pendingLinks:   pendingHardLinks,
 		}
-		err = extractHardLinks(pkg, extractHardLinkOptions)
+		err = extractHardLinks(pkgReader, extractHardLinkOptions)
 		if err != nil {
 			return err
 		}
@@ -301,8 +301,8 @@ type extractHardLinkOptions struct {
 
 // extractHardLinks iterates through the tarball a second time to extract the
 // hard links that were not extracted in the first pass.
-func extractHardLinks(pkg TarStreamer, opts *extractHardLinkOptions) error {
-	tarStream, err := pkg.TarStream()
+func extractHardLinks(pkgReader TarStreamer, opts *extractHardLinkOptions) error {
+	tarStream, err := pkgReader.TarStream()
 	if err != nil {
 		return err
 	}
