@@ -25,16 +25,18 @@ type extractTest struct {
 	error      string
 }
 
+var testPkg = testutil.NewTestPkg(testutil.TestPackageEntries...)
+
 var extractTests = []extractTest{{
 	summary: "Extract nothing",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: nil,
 	},
 	result: map[string]string{},
 }, {
 	summary: "Extract a few entries",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/file": []tarball.ExtractInfo{{
@@ -68,7 +70,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Extract a few entries, nil Create closure",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/file": []tarball.ExtractInfo{{
@@ -104,7 +106,7 @@ var extractTests = []extractTest{{
 	},
 }, {
 	summary: "Copy a couple of entries elsewhere",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/file": []tarball.ExtractInfo{{
@@ -126,7 +128,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{"/foo/", "/foo/bar/"},
 }, {
 	summary: "Copy same file twice",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/file": []tarball.ExtractInfo{{
@@ -146,7 +148,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{"/dir/bar/", "/dir/foo/"},
 }, {
 	summary: "Globbing a single dir level",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/s*/": []tarball.ExtractInfo{{
@@ -161,7 +163,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Globbing for files with multiple levels at once",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/s**": []tarball.ExtractInfo{{
@@ -179,7 +181,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Globbing multiple paths",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/s**": []tarball.ExtractInfo{{
@@ -201,7 +203,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Globbing must have matching source and target",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/foo/b**": []tarball.ExtractInfo{{
@@ -212,7 +214,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": when using wildcards source and target paths must match: /foo/b\*\*`,
 }, {
 	summary: "Globbing must also have a single target",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/foo/b**": []tarball.ExtractInfo{{
@@ -225,7 +227,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": when using wildcards source and target paths must match: /foo/b\*\*`,
 }, {
 	summary: "Globbing cannot change modes",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/n**": []tarball.ExtractInfo{{
@@ -237,7 +239,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": when using wildcards source and target paths must match: /dir/n\*\*`,
 }, {
 	summary: "Missing file",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/missing-file": []tarball.ExtractInfo{{
@@ -248,7 +250,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": no content at /missing-file`,
 }, {
 	summary: "Missing directory",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/missing-dir/": []tarball.ExtractInfo{{
@@ -259,7 +261,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": no content at /missing-dir/`,
 }, {
 	summary: "Missing glob",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/missing-dir/**": []tarball.ExtractInfo{{
@@ -270,7 +272,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": no content at /missing-dir/\*\*`,
 }, {
 	summary: "Missing multiple entries",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/missing-file": []tarball.ExtractInfo{{
@@ -284,7 +286,7 @@ var extractTests = []extractTest{{
 	error: `cannot extract from package "test-package": no content at:\n- /missing-dir/\n- /missing-file`,
 }, {
 	summary: "Optional entries may be missing",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/": []tarball.ExtractInfo{{
@@ -306,7 +308,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Optional entries mixed in cannot be missing",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/missing-file": []tarball.ExtractInfo{{
@@ -340,7 +342,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Entries for same destination must have the same mode",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/": []tarball.ExtractInfo{{
@@ -440,7 +442,7 @@ var extractTests = []extractTest{{
 	notCreated: []string{},
 }, {
 	summary: "Explicit extraction overrides existing file",
-	pkg:     testutil.NewTestPkg(testutil.TestPackageEntries...),
+	pkg:     testPkg,
 	options: tarball.ExtractOptions{
 		Extract: map[string][]tarball.ExtractInfo{
 			"/dir/": []tarball.ExtractInfo{{
