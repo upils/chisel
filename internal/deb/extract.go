@@ -14,7 +14,7 @@ type Pkg struct {
 	reader io.ReadSeekCloser
 }
 
-func OpenPkg(reader io.ReadSeekCloser) *Pkg {
+func Open(reader io.ReadSeekCloser) *Pkg {
 	return &Pkg{reader: reader}
 }
 

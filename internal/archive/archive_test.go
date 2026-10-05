@@ -707,7 +707,7 @@ func (s *httpSuite) TestPackageInfo(c *C) {
 	}
 }
 
-func read(pkg tarball.PkgReader) string {
+func read(pkg tarball.TarStreamer) string {
 	tarStream, err := pkg.TarStream()
 	if err != nil {
 		panic(err)

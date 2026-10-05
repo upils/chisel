@@ -16,7 +16,7 @@ import (
 	"github.com/canonical/chisel/internal/strdist"
 )
 
-type PkgReader interface {
+type TarStreamer interface {
 	// TarStream returns a reader over the raw, unparsed tar stream.
 	// Each call returns a fresh stream, from its start.
 	TarStream() (io.ReadCloser, error)
@@ -64,7 +64,7 @@ func getValidOptions(options *ExtractOptions) (*ExtractOptions, error) {
 	return options, nil
 }
 
-func Extract(pkg PkgReader, options *ExtractOptions) (err error) {
+func Extract(pkg TarStreamer, options *ExtractOptions) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot extract from package %q: %w", options.Package, err)
@@ -88,7 +88,7 @@ func Extract(pkg PkgReader, options *ExtractOptions) (err error) {
 	return extractEntries(pkg, validOpts)
 }
 
-func extractEntries(pkg PkgReader, options *ExtractOptions) error {
+func extractEntries(pkg TarStreamer, options *ExtractOptions) error {
 	tarStream, err := pkg.TarStream()
 	if err != nil {
 		return err
@@ -301,7 +301,7 @@ type extractHardLinkOptions struct {
 
 // extractHardLinks iterates through the tarball a second time to extract the
 // hard links that were not extracted in the first pass.
-func extractHardLinks(pkg PkgReader, opts *extractHardLinkOptions) error {
+func extractHardLinks(pkg TarStreamer, opts *extractHardLinkOptions) error {
 	tarStream, err := pkg.TarStream()
 	if err != nil {
 		return err

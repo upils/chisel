@@ -21,7 +21,7 @@ import (
 
 type Archive interface {
 	Options() *Options
-	Fetch(pkg string) (tarball.PkgReader, *PackageInfo, error)
+	Fetch(pkg string) (tarball.TarStreamer, *PackageInfo, error)
 	Exists(pkg string) bool
 	Info(pkg string) (*PackageInfo, error)
 }
@@ -141,7 +141,7 @@ func (a *ubuntuArchive) selectPackage(pkg string) (control.Section, *ubuntuIndex
 	return selectedSection, selectedIndex, nil
 }
 
-func (a *ubuntuArchive) Fetch(pkg string) (tarball.PkgReader, *PackageInfo, error) {
+func (a *ubuntuArchive) Fetch(pkg string) (tarball.TarStreamer, *PackageInfo, error) {
 	section, index, err := a.selectPackage(pkg)
 	if err != nil {
 		return nil, nil, err
@@ -154,7 +154,7 @@ func (a *ubuntuArchive) Fetch(pkg string) (tarball.PkgReader, *PackageInfo, erro
 		return nil, nil, err
 	}
 	info := sectionPackageInfo(section)
-	return deb.OpenPkg(reader), info, nil
+	return deb.Open(reader), info, nil
 }
 
 func (a *ubuntuArchive) Info(pkg string) (*PackageInfo, error) {

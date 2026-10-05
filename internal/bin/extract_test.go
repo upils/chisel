@@ -10,7 +10,7 @@ import (
 	"github.com/canonical/chisel/internal/testutil"
 )
 
-var _ tarball.PkgReader = (*bin.Pkg)(nil)
+var _ tarball.TarStreamer = (*bin.Pkg)(nil)
 
 func (s *S) TestPkgTarStream(c *C) {
 	pkg := testutil.NewBinPkg(testutil.MustMakeBin([]testutil.TarEntry{

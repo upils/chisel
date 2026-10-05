@@ -10,7 +10,7 @@ import (
 	"github.com/canonical/chisel/internal/testutil"
 )
 
-var _ tarball.PkgReader = (*deb.Pkg)(nil)
+var _ tarball.TarStreamer = (*deb.Pkg)(nil)
 
 func (s *S) TestPkgTarStream(c *C) {
 	pkg := testutil.NewDebPkg(testutil.PackageData["test-package"])

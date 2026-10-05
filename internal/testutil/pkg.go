@@ -8,7 +8,7 @@ import (
 	"github.com/canonical/chisel/internal/deb"
 )
 
-// TestPkg is a PkgReader over an in-memory tar stream.
+// TestPkg is a tarball.TarStreamer over an in-memory tar stream.
 type TestPkg struct {
 	tarData []byte
 }
@@ -32,10 +32,10 @@ func (p *TestPkg) Close() error {
 
 // NewDebPkg returns a deb.Pkg over the given Debian package data.
 func NewDebPkg(data []byte) *deb.Pkg {
-	return deb.OpenPkg(ReadSeekNopCloser(bytes.NewReader(data)))
+	return deb.Open(ReadSeekNopCloser(bytes.NewReader(data)))
 }
 
 // NewBinPkg returns a bin.Pkg over the given bin package data.
 func NewBinPkg(data []byte) *bin.Pkg {
-	return bin.OpenPkg(ReadSeekNopCloser(bytes.NewReader(data)))
+	return bin.Open(ReadSeekNopCloser(bytes.NewReader(data)))
 }

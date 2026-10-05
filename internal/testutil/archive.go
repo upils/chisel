@@ -27,7 +27,7 @@ func (a *TestArchive) Options() *archive.Options {
 	return &a.Opts
 }
 
-func (a *TestArchive) Fetch(pkgName string) (tarball.PkgReader, *archive.PackageInfo, error) {
+func (a *TestArchive) Fetch(pkgName string) (tarball.TarStreamer, *archive.PackageInfo, error) {
 	pkg, ok := a.Packages[pkgName]
 	if !ok {
 		return nil, nil, fmt.Errorf("cannot find package %q in archive", pkgName)
@@ -38,7 +38,7 @@ func (a *TestArchive) Fetch(pkgName string) (tarball.PkgReader, *archive.Package
 		SHA256:  pkg.Hash,
 		Arch:    pkg.Arch,
 	}
-	return deb.OpenPkg(ReadSeekNopCloser(bytes.NewReader(pkg.Data))), info, nil
+	return deb.Open(ReadSeekNopCloser(bytes.NewReader(pkg.Data))), info, nil
 }
 
 func (a *TestArchive) Exists(pkg string) bool {
