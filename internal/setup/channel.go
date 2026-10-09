@@ -8,17 +8,6 @@ import (
 	"unicode"
 )
 
-// Channel patterns follow the "<track>/<risk>" form, where the track is
-// a literal and only the risk part accepts operators:
-//
-//	*            - Any risk of that track
-//	!<risk>      - Any risk of that track but that one
-//	<risk>[,...] - Only those risks of that track
-//
-// Patterns are kept as written and interpreted on each match, as done for
-// globs in the strdist package. They are validated when the release is read so
-// that a malformed value is reported early, and rendered back verbatim.
-
 // Channel is a store channel, as in "<track>/<risk>[/<branch>]".
 type Channel struct {
 	Track  string
@@ -40,13 +29,22 @@ func (c Channel) String() string {
 	return channel
 }
 
-// The form a channel pattern must take, as reported to the user.
-const channelPatternForm = "<track>/<risk>"
+// Channel patterns follow the "<track>/<risk-pattern>" form, where the
+// track is a literal and only the risk pattern accepts operators:
+//
+//	*            - Any risk of that track
+//	!<risk>      - Any risk of that track but that one
+//	<risk>[,...] - Only those risks of that track
+//
+// Patterns are kept as written and interpreted on each match, as done for
+// globs in the strdist package. They are validated when the release is read so
+// that a malformed value is reported early, and rendered back verbatim.
 
-// splitChannel splits a channel or a channel pattern on "/", checking what the
-// two have in common: no spaces and no empty segment. How many segments are
-// expected and what each one means is left to the caller, as that is where the
-// two differ. form is the shape reported on error.
+// The form a channel pattern must take, as reported to the user.
+const channelPatternForm = "<track>/<risk-pattern>"
+
+// splitChannel splits a channel or a channel pattern on "/", rejecting values
+// holding spaces or an empty segment.
 func splitChannel(value, form string) ([]string, error) {
 	if strings.ContainsFunc(value, unicode.IsSpace) {
 		return nil, errors.New("must not contain spaces")
@@ -59,11 +57,9 @@ func splitChannel(value, form string) ([]string, error) {
 }
 
 // knownRisks holds every risk a channel may hold, from the most to the least
-// stable. The set is defined by the store and does not depend on its content,
-// hence risks are validated as architectures are.
+// stable. The set is defined by the store and does not depend on its content.
 var knownRisks = []string{"stable", "candidate", "beta", "edge"}
 
-// validateRisk validates a single risk of a channel or of a channel pattern.
 func validateRisk(risk string) error {
 	if !slices.Contains(knownRisks, risk) {
 		return fmt.Errorf("unknown risk %q, must be one of %s", risk, strings.Join(knownRisks, ", "))
@@ -90,7 +86,7 @@ func validateChannelPatterns(patterns []string) error {
 }
 
 // validateChannelPattern validates a single pattern and returns its track. A
-// pattern holds no branch, hence exactly one track and one risk part.
+// pattern holds no branch, hence exactly one track and one risk pattern.
 func validateChannelPattern(pattern string) (track string, err error) {
 	segments, err := splitChannel(pattern, channelPatternForm)
 	if err != nil {
@@ -99,23 +95,23 @@ func validateChannelPattern(pattern string) (track string, err error) {
 	if len(segments) != 2 {
 		return "", fmt.Errorf("must be %s", channelPatternForm)
 	}
-	track, riskPart := segments[0], segments[1]
+	track, riskPattern := segments[0], segments[1]
 	if strings.ContainsAny(track, "*!,") {
 		return "", errors.New("only the risk accepts '*', '!' and ','")
 	}
-	if riskPart != "*" && strings.Contains(riskPart, "*") {
-		// Checked before the risk part takes one of the forms below, as a
+	if riskPattern != "*" && strings.Contains(riskPattern, "*") {
+		// Checked before the risk pattern takes one of the forms below, as a
 		// wildcard is not allowed within any of them.
 		return "", errors.New("'*' must be the whole risk")
 	}
 
-	// The risk part takes one of the three forms of the grammar.
+	// The risk pattern takes one of the three forms of the grammar.
 	switch {
-	case riskPart == "*":
+	case riskPattern == "*":
 		// Every risk of the track, nothing more to validate.
-	case strings.HasPrefix(riskPart, "!"):
+	case strings.HasPrefix(riskPattern, "!"):
 		// Every risk of the track but the excluded one.
-		except := strings.TrimPrefix(riskPart, "!")
+		except := strings.TrimPrefix(riskPattern, "!")
 		if strings.Contains(except, ",") {
 			return "", errors.New("'!' cannot be combined with other risks")
 		}
@@ -127,7 +123,7 @@ func validateChannelPattern(pattern string) (track string, err error) {
 		}
 	default:
 		// Only the listed risks of the track.
-		risks := strings.Split(riskPart, ",")
+		risks := strings.Split(riskPattern, ",")
 		for i, risk := range risks {
 			if risk == "" {
 				return "", fmt.Errorf("must be %s", channelPatternForm)
@@ -146,7 +142,7 @@ func validateChannelPattern(pattern string) (track string, err error) {
 	return track, nil
 }
 
-// MatchChannelPatterns reports whether the concrete "<track>/<risk>" channel
+// MatchChannelPatterns returns whether the concrete "<track>/<risk>" channel
 // matches any of the patterns. An empty list matches every channel, which
 // means the patterns carry no restriction.
 //
@@ -158,8 +154,9 @@ func MatchChannelPatterns(patterns []string, channel Channel) bool {
 		return true
 	}
 	if channel.Track == "" || channel.Risk == "" {
-		// A channel without a risk is not a channel. Never match it, rather
-		// than treat the missing risk as one that differs from an excluded one.
+		// A channel without a track or a risk is not a channel. Never match
+		// it, rather than treat the missing risk as one that differs from an
+		// excluded one.
 		return false
 	}
 	for _, pattern := range patterns {
@@ -170,21 +167,21 @@ func MatchChannelPatterns(patterns []string, channel Channel) bool {
 	return false
 }
 
-// matchChannel reports whether the pattern matches the track and the risk of a
+// matchChannel returns whether the pattern matches the track and the risk of a
 // concrete channel. Note that the exclusion form is scoped to its own track, so
 // "1.0/!stable" does not match any risk of the "2.0" track.
 //
 // The pattern is expected to be valid, as ensured when the release is read.
 func matchChannel(pattern, track, risk string) bool {
-	patternTrack, riskPart, _ := strings.Cut(pattern, "/")
+	patternTrack, riskPattern, _ := strings.Cut(pattern, "/")
 	if track != patternTrack {
 		return false
 	}
-	if riskPart == "*" {
+	if riskPattern == "*" {
 		return true
 	}
-	if except, ok := strings.CutPrefix(riskPart, "!"); ok {
+	if except, ok := strings.CutPrefix(riskPattern, "!"); ok {
 		return risk != except
 	}
-	return slices.Contains(strings.Split(riskPart, ","), risk)
+	return slices.Contains(strings.Split(riskPattern, ","), risk)
 }

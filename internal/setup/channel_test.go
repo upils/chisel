@@ -91,19 +91,19 @@ var channelPatternTests = []struct {
 }, {
 	summary: "Missing risk",
 	values:  []string{"0.3"},
-	err:     `"0.3": must be <track>/<risk>`,
+	err:     `"0.3": must be <track>/<risk-pattern>`,
 }, {
 	summary: "Empty risk",
 	values:  []string{"0.3/"},
-	err:     `"0.3/": must be <track>/<risk>`,
+	err:     `"0.3/": must be <track>/<risk-pattern>`,
 }, {
 	summary: "Empty track",
 	values:  []string{"/stable"},
-	err:     `"/stable": must be <track>/<risk>`,
+	err:     `"/stable": must be <track>/<risk-pattern>`,
 }, {
 	summary: "Pattern holding a branch",
 	values:  []string{"0.3/stable/mybranch"},
-	err:     `"0.3/stable/mybranch": must be <track>/<risk>`,
+	err:     `"0.3/stable/mybranch": must be <track>/<risk-pattern>`,
 }, {
 	summary: "Wildcard track",
 	values:  []string{"*/stable"},
@@ -127,7 +127,7 @@ var channelPatternTests = []struct {
 }, {
 	summary: "Empty excluded risk",
 	values:  []string{"0.3/!"},
-	err:     `"0.3/!": must be <track>/<risk>`,
+	err:     `"0.3/!": must be <track>/<risk-pattern>`,
 }, {
 	summary: "Unknown risk",
 	values:  []string{"0.3/whatever"},
@@ -153,11 +153,11 @@ var channelPatternTests = []struct {
 	// split cannot catch as the risk part is not an empty segment.
 	summary: "Trailing comma in a list",
 	values:  []string{"0.3/edge,"},
-	err:     `"0.3/edge,": must be <track>/<risk>`,
+	err:     `"0.3/edge,": must be <track>/<risk-pattern>`,
 }, {
 	summary: "Leading comma in a list",
 	values:  []string{"0.3/,edge"},
-	err:     `"0.3/,edge": must be <track>/<risk>`,
+	err:     `"0.3/,edge": must be <track>/<risk-pattern>`,
 }, {
 	summary: "Repeated track",
 	values:  []string{"0.3/*", "0.3/edge"},
