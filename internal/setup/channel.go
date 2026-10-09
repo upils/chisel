@@ -68,7 +68,7 @@ func validateRisk(risk string) error {
 }
 
 // validateChannelPatterns validates a list of patterns. A track may appear
-// at most once across the values so that the resulting set of channels is
+// at most once across the patterns so that the resulting set of channels is
 // unambiguous.
 func validateChannelPatterns(patterns []string) error {
 	seen := make(map[string]bool, len(patterns))

@@ -65,7 +65,7 @@ type Package struct {
 	Archive         string
 	Store           string
 	DefaultTrack    string
-	ChannelPatterns []string // Channels patterns the package is compatible with.
+	ChannelPatterns []string // Channel patterns the package is compatible with.
 	Slices          map[string]*Slice
 }
 
