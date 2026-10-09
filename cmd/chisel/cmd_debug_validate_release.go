@@ -8,7 +8,7 @@ var (
 	shortValidateReleaseHelp = "Validate a Chisel release"
 	longValidateReleaseHelp  = `
 The validate-release command performs the static validation of a Chisel
-release, checking the slice definition files (SDFs) and the chisel.yaml file
+release, checking the package slices files and the chisel.yaml file
 for structural issues without downloading any package.
 
 By default it fetches the slices for the same Ubuntu version as the current
