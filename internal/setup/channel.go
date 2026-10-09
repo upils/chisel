@@ -8,10 +8,8 @@ import (
 	"unicode"
 )
 
-// The top-level "channels" key of a package slices file holds patterns
-// selecting which concrete "<track>/<risk>" channels the package is
-// compatible with. The track is a literal and only the risk part accepts
-// operators:
+// Channel patterns follow the "<track>/<risk>" form, where the track is
+// a literal and only the risk part accepts operators:
 //
 //	*            - Any risk of that track
 //	!<risk>      - Any risk of that track but that one
@@ -73,9 +71,9 @@ func validateRisk(risk string) error {
 	return nil
 }
 
-// validateChannelPatterns validates the values of a "channel" field. A track
-// may appear at most once across the values so that the resulting set of
-// channels is unambiguous.
+// validateChannelPatterns validates a list of patterns. A track may appear
+// at most once across the values so that the resulting set of channels is
+// unambiguous.
 func validateChannelPatterns(patterns []string) error {
 	seen := make(map[string]bool, len(patterns))
 	for _, pattern := range patterns {
@@ -149,8 +147,8 @@ func validateChannelPattern(pattern string) (track string, err error) {
 }
 
 // MatchChannelPatterns reports whether the concrete "<track>/<risk>" channel
-// matches any of the patterns. An empty list matches every channel, which means
-// the entry is not channel specific.
+// matches any of the patterns. An empty list matches every channel, which
+// means the patterns carry no restriction.
 //
 // A branch, as in "<track>/<risk>/<branch>", is ignored. Branches are ephemeral
 // and thus never part of a pattern, so an entry applies to every branch of the

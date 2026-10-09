@@ -4333,8 +4333,6 @@ var setupTests = []setupTest{{
 	},
 	relerror: `cannot parse package "mypkg": 'channels' is unsupported before format v3`,
 }, {
-	// The pattern grammar itself is covered by channel_test.go. This test
-	// only ensures grammar errors are reported with the package context.
 	summary: "channels with invalid value report the package context",
 	input: map[string]string{
 		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
