@@ -128,6 +128,7 @@ func selectPackageSlices(release *setup.Release, queries []string) (packages []*
 				Archive:      releasePkg.Archive,
 				Store:        releasePkg.Store,
 				DefaultTrack: releasePkg.DefaultTrack,
+				Channels:     releasePkg.Channels,
 				Slices:       make(map[string]*setup.Slice),
 			}
 			for _, sliceName := range pkgSlices[pkgName] {

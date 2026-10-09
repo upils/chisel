@@ -65,6 +65,7 @@ type Package struct {
 	Archive      string
 	Store        string
 	DefaultTrack string
+	Channels     []string // Channels the package is compatible with.
 	Slices       map[string]*Slice
 }
 
@@ -143,6 +144,8 @@ type SliceKey = apacheutil.SliceKey
 func ParseSliceKey(sliceKey string) (SliceKey, error) {
 	return apacheutil.ParseSliceKey(sliceKey)
 }
+
+const DefaultRisk = "stable"
 
 func (s *Slice) String() string { return s.Package + "_" + s.Name }
 

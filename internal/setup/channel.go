@@ -8,9 +8,10 @@ import (
 	"unicode"
 )
 
-// The "channel" field of a slice definition holds patterns selecting which
-// concrete "<track>/<risk>" channels an entry applies to. The track is a
-// literal and only the risk part accepts operators:
+// The top-level "channels" key of a package slices file holds patterns
+// selecting which concrete "<track>/<risk>" channels the package is
+// compatible with. The track is a literal and only the risk part accepts
+// operators:
 //
 //	*            - Any risk of that track
 //	!<risk>      - Any risk of that track but that one
@@ -28,12 +29,12 @@ type Channel struct {
 }
 
 func (c Channel) String() string {
-	if c.Track == "" {
+	if c == (Channel{}) {
 		return ""
 	}
-	channel := c.Track
-	if c.Risk != "" {
-		channel += "/" + c.Risk
+	channel := c.Risk
+	if c.Track != "" {
+		channel = c.Track + "/" + channel
 	}
 	if c.Branch != "" {
 		channel += "/" + c.Branch

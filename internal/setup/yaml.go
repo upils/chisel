@@ -60,10 +60,11 @@ type yamlStore struct {
 }
 
 type yamlPackage struct {
-	RealName     string `yaml:"package"`
-	Archive      string `yaml:"archive,omitempty"`
-	Store        string `yaml:"store,omitempty"`
-	DefaultTrack string `yaml:"default-track,omitempty"`
+	RealName     string      `yaml:"package"`
+	Archive      string      `yaml:"archive,omitempty"`
+	Store        string      `yaml:"store,omitempty"`
+	DefaultTrack string      `yaml:"default-track,omitempty"`
+	Channels     yamlChannel `yaml:"channels,omitempty"`
 	// For backwards-compatibility reasons with v1 and v2, essential needs
 	// custom logic to be parsed. See [yamlEssentialListMap].
 	Essential yamlEssentialListMap `yaml:"essential,omitempty"`
@@ -196,6 +197,33 @@ func (ya yamlArch) MarshalYAML() (any, error) {
 }
 
 var _ yaml.Marshaler = yamlArch{}
+
+type yamlChannel struct {
+	List []string
+}
+
+func (yc *yamlChannel) UnmarshalYAML(value *yaml.Node) error {
+	var s string
+	var l []string
+	if value.Decode(&s) == nil {
+		yc.List = []string{s}
+	} else if value.Decode(&l) == nil {
+		yc.List = l
+	} else {
+		return fmt.Errorf("cannot decode channel")
+	}
+	// Validate channel correctness later for a better error message.
+	return nil
+}
+
+func (yc yamlChannel) MarshalYAML() (any, error) {
+	if len(yc.List) == 1 {
+		return yc.List[0], nil
+	}
+	return yc.List, nil
+}
+
+var _ yaml.Marshaler = yamlChannel{}
 
 type yamlMode uint
 
@@ -518,6 +546,30 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 		return nil, fmt.Errorf("cannot parse package %q: 'default-track' requires 'store'", pkg.Name)
 	}
 
+	if len(yamlPkg.Channels.List) > 0 && (release.Format == "v1" || release.Format == "v2") {
+		return nil, fmt.Errorf("cannot parse package %q: 'channels' is unsupported before format v3", pkg.Name)
+	}
+	if pkg.Store == "" {
+		if len(yamlPkg.Channels.List) > 0 {
+			return nil, fmt.Errorf("cannot parse package %q: 'channels' requires 'store'", pkg.Name)
+		}
+	} else {
+		if len(yamlPkg.Channels.List) == 0 {
+			return nil, fmt.Errorf("cannot parse package %q: 'store' requires 'channels'", pkg.Name)
+		}
+		if err := validateChannelPatterns(yamlPkg.Channels.List); err != nil {
+			return nil, fmt.Errorf("cannot parse package %q: invalid 'channels' value: %s", pkg.Name, err)
+		}
+		// The default track is resolved with the default risk, so the
+		// package must be compatible with that channel, otherwise cutting
+		// it would always fail.
+		defaultChannel := Channel{Track: pkg.DefaultTrack, Risk: DefaultRisk}
+		if !MatchChannelPatterns(yamlPkg.Channels.List, defaultChannel) {
+			return nil, fmt.Errorf("cannot parse package %q: 'channels' must match the default track %q", pkg.Name, pkg.DefaultTrack)
+		}
+		pkg.Channels = yamlPkg.Channels.List
+	}
+
 	if release.Format == "v1" || release.Format == "v2" {
 		if yamlPkg.Essential.style != unsetEssential && yamlPkg.Essential.style != listEssential {
 			return nil, fmt.Errorf("cannot parse package %q: essential expects a list", pkg.Name)
@@ -758,6 +810,7 @@ func packageToYAML(p *Package) (*yamlPackage, error) {
 		Archive:      p.Archive,
 		Store:        p.Store,
 		DefaultTrack: p.DefaultTrack,
+		Channels:     yamlChannel{List: p.Channels},
 		Slices:       make(map[string]yamlSlice, len(p.Slices)),
 	}
 	for name, slice := range p.Slices {
