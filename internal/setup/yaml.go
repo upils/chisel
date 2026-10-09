@@ -565,7 +565,7 @@ func parsePackage(release *Release, pkgName, pkgPath string, data []byte) (*Pack
 		// it would always fail.
 		defaultChannel := Channel{Track: pkg.DefaultTrack, Risk: DefaultRisk}
 		if !MatchChannelPatterns(yamlPkg.Channels.List, defaultChannel) {
-			return nil, fmt.Errorf("cannot parse package %q: 'channels' must match the default track %q", pkg.Name, pkg.DefaultTrack)
+			return nil, fmt.Errorf("cannot parse package %q: 'channels' must match the default channel %q", pkg.Name, defaultChannel)
 		}
 		pkg.Channels = yamlPkg.Channels.List
 	}

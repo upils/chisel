@@ -4355,7 +4355,7 @@ var setupTests = []setupTest{{
 			channels: ["3.0/*"]
 		`,
 	},
-	relerror: `cannot parse package "bin-mypkg": 'channels' must match the default track "2"`,
+	relerror: `cannot parse package "bin-mypkg": 'channels' must match the default channel "2/stable"`,
 }, {
 	summary: "channels excluding the default risk",
 	input: map[string]string{
@@ -4367,7 +4367,7 @@ var setupTests = []setupTest{{
 			channels: ["2/!stable"]
 		`,
 	},
-	relerror: `cannot parse package "bin-mypkg": 'channels' must match the default track "2"`,
+	relerror: `cannot parse package "bin-mypkg": 'channels' must match the default channel "2/stable"`,
 }, {
 	summary: "Store missing version",
 	input: map[string]string{
