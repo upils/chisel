@@ -4116,13 +4116,13 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"bin-mypkg": {
-				RealName:     "mypkg",
-				Name:         "bin-mypkg",
-				Path:         "bin-slices/mypkg.yaml",
-				Store:        "bin",
-				DefaultTrack: "3.0",
-				Channels:     []string{"3.0/*"},
-				Slices:       map[string]*setup.Slice{},
+				RealName:        "mypkg",
+				Name:            "bin-mypkg",
+				Path:            "bin-slices/mypkg.yaml",
+				Store:           "bin",
+				DefaultTrack:    "3.0",
+				ChannelPatterns: []string{"3.0/*"},
+				Slices:          map[string]*setup.Slice{},
 			},
 		},
 		Maintenance: &setup.Maintenance{
@@ -4140,7 +4140,7 @@ var setupTests = []setupTest{{
 			default-track: "3.0"
 		`,
 	},
-	relerror: `cannot parse package "mypkg": 'store' and 'default-track' are unsupported before format v3`,
+	relerror: `cannot parse package "mypkg": 'store', 'default-track' and 'channels' are unsupported before format v3`,
 }, {
 	summary: "Store and archive are mutually exclusive",
 	input: map[string]string{
@@ -4228,13 +4228,13 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"bin-mypkg": {
-				RealName:     "mypkg",
-				Name:         "bin-mypkg",
-				Path:         "bin-slices/mypkg.yaml",
-				Store:        "bin",
-				DefaultTrack: "2",
-				Channels:     []string{"2/*", "3/*", "4/edge"},
-				Slices:       map[string]*setup.Slice{},
+				RealName:        "mypkg",
+				Name:            "bin-mypkg",
+				Path:            "bin-slices/mypkg.yaml",
+				Store:           "bin",
+				DefaultTrack:    "2",
+				ChannelPatterns: []string{"2/*", "3/*", "4/edge"},
+				Slices:          map[string]*setup.Slice{},
 			},
 		},
 		Maintenance: &setup.Maintenance{
@@ -4275,13 +4275,13 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"bin-mypkg": {
-				RealName:     "mypkg",
-				Name:         "bin-mypkg",
-				Path:         "bin-slices/mypkg.yaml",
-				Store:        "bin",
-				DefaultTrack: "2",
-				Channels:     []string{"2/stable"},
-				Slices:       map[string]*setup.Slice{},
+				RealName:        "mypkg",
+				Name:            "bin-mypkg",
+				Path:            "bin-slices/mypkg.yaml",
+				Store:           "bin",
+				DefaultTrack:    "2",
+				ChannelPatterns: []string{"2/stable"},
+				Slices:          map[string]*setup.Slice{},
 			},
 		},
 		Maintenance: &setup.Maintenance{
@@ -4331,7 +4331,7 @@ var setupTests = []setupTest{{
 			channels: ["3.0/*"]
 		`,
 	},
-	relerror: `cannot parse package "mypkg": 'channels' is unsupported before format v3`,
+	relerror: `cannot parse package "mypkg": 'store', 'default-track' and 'channels' are unsupported before format v3`,
 }, {
 	summary: "channels with invalid value report the package context",
 	input: map[string]string{
@@ -4511,12 +4511,12 @@ var setupTests = []setupTest{{
 				},
 			},
 			"bin-curl": {
-				RealName:     "curl",
-				Name:         "bin-curl",
-				Path:         "bin-slices/curl.yaml",
-				Store:        "bin",
-				DefaultTrack: "3.0",
-				Channels:     []string{"3.0/*"},
+				RealName:        "curl",
+				Name:            "bin-curl",
+				Path:            "bin-slices/curl.yaml",
+				Store:           "bin",
+				DefaultTrack:    "3.0",
+				ChannelPatterns: []string{"3.0/*"},
 				Slices: map[string]*setup.Slice{
 					"bins": {
 						Package: "bin-curl",
@@ -4566,13 +4566,13 @@ var setupTests = []setupTest{{
 		},
 		Packages: map[string]*setup.Package{
 			"bin-mypkg": {
-				RealName:     "mypkg",
-				Name:         "bin-mypkg",
-				Path:         "slices/mypkg.yaml",
-				Store:        "bin",
-				DefaultTrack: "3.0",
-				Channels:     []string{"3.0/*"},
-				Slices:       map[string]*setup.Slice{},
+				RealName:        "mypkg",
+				Name:            "bin-mypkg",
+				Path:            "slices/mypkg.yaml",
+				Store:           "bin",
+				DefaultTrack:    "3.0",
+				ChannelPatterns: []string{"3.0/*"},
+				Slices:          map[string]*setup.Slice{},
 			},
 		},
 		Maintenance: &setup.Maintenance{
@@ -4684,12 +4684,12 @@ var setupTests = []setupTest{{
 				},
 			},
 			"bin-curl": {
-				RealName:     "curl",
-				Name:         "bin-curl",
-				Path:         "slices/bins/curl.yaml",
-				Store:        "bin",
-				DefaultTrack: "3.0",
-				Channels:     []string{"3.0/*"},
+				RealName:        "curl",
+				Name:            "bin-curl",
+				Path:            "slices/bins/curl.yaml",
+				Store:           "bin",
+				DefaultTrack:    "3.0",
+				ChannelPatterns: []string{"3.0/*"},
 				Slices: map[string]*setup.Slice{
 					"bins": {
 						Package: "bin-curl",

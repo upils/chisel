@@ -29,6 +29,8 @@ func (c Channel) String() string {
 	return channel
 }
 
+const DefaultRisk = "stable"
+
 // Channel patterns follow the "<track>/<risk-pattern>" form, where the
 // track is a literal and only the risk pattern accepts operators:
 //
@@ -158,28 +160,28 @@ func MatchChannelPatterns(patterns []string, channel Channel) bool {
 		return false
 	}
 	for _, pattern := range patterns {
-		if matchChannel(pattern, channel.Track, channel.Risk) {
+		if matchChannelPattern(pattern, channel) {
 			return true
 		}
 	}
 	return false
 }
 
-// matchChannel returns whether the pattern matches the track and the risk of a
-// concrete channel. Note that the exclusion form is scoped to its own track, so
-// "1.0/!stable" does not match any risk of the "2.0" track.
+// matchChannelPattern returns whether the pattern matches the given channel.
+// Note that the exclusion form is scoped to its own track, so "1.0/!stable"
+// does not match any risk of the "2.0" track.
 //
-// The pattern is expected to be valid, as ensured when the release is read.
-func matchChannel(pattern, track, risk string) bool {
+// The pattern is expected to be valid.
+func matchChannelPattern(pattern string, channel Channel) bool {
 	patternTrack, riskPattern, _ := strings.Cut(pattern, "/")
-	if track != patternTrack {
+	if channel.Track != patternTrack {
 		return false
 	}
 	if riskPattern == "*" {
 		return true
 	}
 	if except, ok := strings.CutPrefix(riskPattern, "!"); ok {
-		return risk != except
+		return channel.Risk != except
 	}
-	return slices.Contains(strings.Split(riskPattern, ","), risk)
+	return slices.Contains(strings.Split(riskPattern, ","), channel.Risk)
 }
