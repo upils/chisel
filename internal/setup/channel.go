@@ -36,9 +36,7 @@ func (c Channel) String() string {
 //	!<risk>      - Any risk of that track but that one
 //	<risk>[,...] - Only those risks of that track
 //
-// Patterns are kept as written and interpreted on each match, as done for
-// globs in the strdist package. They are validated when the release is read so
-// that a malformed value is reported early, and rendered back verbatim.
+// Patterns are kept as written and interpreted on each match.
 
 // The form a channel pattern must take, as reported to the user.
 const channelPatternForm = "<track>/<risk-pattern>"
