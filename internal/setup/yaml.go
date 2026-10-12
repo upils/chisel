@@ -128,10 +128,8 @@ func (es yamlEssentialListMap) MarshalYAML() (any, error) {
 	return es.Values, nil
 }
 
-var (
-	_ yaml.Marshaler   = yamlEssentialListMap{}
-	_ yaml.Unmarshaler = (*yamlEssentialListMap)(nil)
-)
+var _ yaml.Marshaler   = yamlEssentialListMap{}
+var _ yaml.Unmarshaler = (*yamlEssentialListMap)(nil)
 
 type yamlPath struct {
 	Dir      bool         `yaml:"make,omitempty"`
