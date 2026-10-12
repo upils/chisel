@@ -55,7 +55,6 @@ var channelPatternTests = []struct {
 	summary: "Channel without a risk never matches",
 	values:  []string{"0.3/*"},
 	match: map[setup.Channel]bool{
-		// A channel without a risk is not a channel.
 		{Track: "0.3"}: false,
 		{}:             false,
 	},
@@ -149,8 +148,6 @@ var channelPatternTests = []struct {
 	values:  []string{"0.3/edge,edge"},
 	err:     `"0.3/edge,edge": risk "edge" is repeated`,
 }, {
-	// A trailing or leading comma leaves an empty risk in the list, which the
-	// split cannot catch as the risk part is not an empty segment.
 	summary: "Trailing comma in a list",
 	values:  []string{"0.3/edge,"},
 	err:     `"0.3/edge,": must be <track>/<risk-pattern>`,
