@@ -31,15 +31,6 @@ func (c Channel) String() string {
 
 const DefaultRisk = "stable"
 
-// Channel patterns follow the "<track>/<risk-pattern>" form, where the
-// track is a literal and only the risk pattern accepts operators:
-//
-//	*            - Any risk of that track
-//	!<risk>      - Any risk of that track but that one
-//	<risk>[,...] - Only those risks of that track
-//
-// Patterns are kept as written and interpreted on each match.
-
 // The form a channel pattern must take, as reported to the user.
 const channelPatternForm = "<track>/<risk-pattern>"
 
@@ -146,6 +137,15 @@ func validateChannelPattern(pattern string) (track string, err error) {
 // matches any of the patterns. An empty list matches every channel, which
 // means the patterns carry no restriction.
 //
+// Channel patterns follow the "<track>/<risk-pattern>" form, where the
+// track is a literal and only the risk pattern accepts operators:
+//
+//   - - Any risk of that track
+//     !<risk>      - Any risk of that track but that one
+//     <risk>[,...] - Only those risks of that track
+//
+// Patterns are kept as written and interpreted on each match.
+//
 // A branch, as in "<track>/<risk>/<branch>", is ignored. Branches are ephemeral
 // and thus never part of a pattern, so an entry applies to every branch of the
 // risk it matches.
@@ -154,9 +154,9 @@ func MatchChannelPatterns(patterns []string, channel Channel) bool {
 		return true
 	}
 	if channel.Track == "" || channel.Risk == "" {
-		// A channel without a track or a risk is not a channel. Never match
-		// it, rather than treat the missing risk as one that differs from an
-		// excluded one.
+		// An empty track or risk means the channel is not fully specified,
+		// so it matches no pattern. In particular, an empty risk must not
+		// match an exclusion such as "!stable", which it otherwise would.
 		return false
 	}
 	for _, pattern := range patterns {
