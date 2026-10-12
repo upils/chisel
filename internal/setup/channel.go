@@ -140,9 +140,9 @@ func validateChannelPattern(pattern string) (track string, err error) {
 // Channel patterns follow the "<track>/<risk-pattern>" form, where the
 // track is a literal and only the risk pattern accepts operators:
 //
-//   - - Any risk of that track
-//     !<risk>      - Any risk of that track but that one
-//     <risk>[,...] - Only those risks of that track
+//   - "*": any risk of that track
+//   - "!<risk>": any risk of that track but that one
+//   - "<risk>[,...]": only those risks of that track
 //
 // Patterns are kept as written and interpreted on each match.
 //

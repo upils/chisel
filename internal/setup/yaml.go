@@ -128,7 +128,7 @@ func (es yamlEssentialListMap) MarshalYAML() (any, error) {
 	return es.Values, nil
 }
 
-var _ yaml.Marshaler   = yamlEssentialListMap{}
+var _ yaml.Marshaler = yamlEssentialListMap{}
 var _ yaml.Unmarshaler = (*yamlEssentialListMap)(nil)
 
 type yamlPath struct {
