@@ -154,7 +154,6 @@ func (s *Slice) String() string { return s.Package + "_" + s.Name }
 type Selection struct {
 	Release *Release
 	Slices  []*Slice
-	Arch    string
 }
 
 // Prefers uses the prefer relationships and returns a map from each path to
@@ -509,7 +508,6 @@ func Select(release *Release, slices []SliceKey, arch string) (*Selection, error
 
 	selection := &Selection{
 		Release: release,
-		Arch:    arch,
 	}
 
 	sorted, err := order(release.Packages, slices, arch)

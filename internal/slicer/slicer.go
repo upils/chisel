@@ -16,7 +16,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/canonical/chisel/internal/archive"
-	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/fsutil"
 	"github.com/canonical/chisel/internal/manifestutil"
 	"github.com/canonical/chisel/internal/scripts"
@@ -77,10 +76,6 @@ func (cc *contentChecker) checkKnown(path string) error {
 }
 
 func Run(options *RunOptions) error {
-	if err := deb.ValidateArch(options.Selection.Arch); err != nil {
-		return fmt.Errorf("internal error: %s", err)
-	}
-
 	oldUmask := syscall.Umask(0)
 	defer func() {
 		syscall.Umask(oldUmask)
@@ -95,7 +90,7 @@ func Run(options *RunOptions) error {
 		targetDir = filepath.Join(dir, targetDir)
 	}
 
-	remotePackages, err := selectRemotePackages(options.Archives, options.Selection)
+	packageRemotes, err := selectPackageRemotes(options.Archives, options.Selection)
 	if err != nil {
 		return err
 	}
@@ -113,11 +108,12 @@ func Run(options *RunOptions) error {
 			extractPackage = make(map[string][]tarball.ExtractInfo)
 			extract[slice.Package] = extractPackage
 		}
+		arch := packageRemotes[slice.Package].Arch()
 		for targetPath, pathInfo := range slice.Contents {
 			if targetPath == "" {
 				continue
 			}
-			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, options.Selection.Arch) {
+			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
 				continue
 			}
 			if preferredPkg, ok := prefers[targetPath]; ok && preferredPkg.Name != slice.Package {
@@ -157,7 +153,7 @@ func Run(options *RunOptions) error {
 			continue
 		}
 		pkg := options.Selection.Release.Packages[slice.Package]
-		reader, info, err := remotePackages[pkg.Name].Fetch()
+		reader, info, err := packageRemotes[pkg.Name].Fetch()
 		if err != nil {
 			return err
 		}
@@ -274,8 +270,9 @@ func Run(options *RunOptions) error {
 	// them to the appropriate slices.
 	relPaths := map[string][]*setup.Slice{}
 	for _, slice := range options.Selection.Slices {
+		arch := packageRemotes[slice.Package].Arch()
 		for relPath, pathInfo := range slice.Contents {
-			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, options.Selection.Arch) {
+			if len(pathInfo.Arch) > 0 && !slices.Contains(pathInfo.Arch, arch) {
 				continue
 			}
 			if pathInfo.Kind == setup.CopyPath || pathInfo.Kind == setup.GlobPath ||
@@ -493,13 +490,12 @@ func createFile(targetDir, relPath string, pathInfo setup.PathInfo) (*fsutil.Ent
 	})
 }
 
-// selectRemotePackages determines the remote package for each package in the selection.
+// selectPackageRemotes determines the remote for each package in the selection.
 // For packages from an archive it selects the highest priority archive
 // containing the package unless a particular archive is pinned within the
-// package slices file. For packages from a store it selects the store
-// named in the package slices file. It returns a map of RemotePackage indexed
-// by package names.
-func selectRemotePackages(archives map[string]archive.Archive, selection *setup.Selection) (map[string]RemotePackage, error) {
+// package slices file. Packages from a store are not supported yet.
+// It returns a map of PackageRemote indexed by package names.
+func selectPackageRemotes(archives map[string]archive.Archive, selection *setup.Selection) (map[string]PackageRemote, error) {
 	sortedArchives := make([]*setup.Archive, 0, len(selection.Release.Archives))
 	for _, archive := range selection.Release.Archives {
 		if archive.Priority < 0 {
@@ -513,21 +509,17 @@ func selectRemotePackages(archives map[string]archive.Archive, selection *setup.
 		return b.Priority - a.Priority
 	})
 
-	remotePackages := make(map[string]RemotePackage)
+	packageRemotes := make(map[string]PackageRemote)
 	for _, s := range selection.Slices {
-		if _, ok := remotePackages[s.Package]; ok {
+		if _, ok := packageRemotes[s.Package]; ok {
 			continue
 		}
 		pkg := selection.Release.Packages[s.Package]
 		if pkg.Store != "" {
-			remotePackages[pkg.Name] = &binPackage{
-				name:     pkg.Name,
-				realName: pkg.RealName,
-				store:    pkg.Store,
-				// TODO: add track and risk when implementing
-				// fetching from the store.
-			}
-			continue
+			// TODO: select the remote for the package from the store, which
+			// requires the arch, track and risk, when fetching from the
+			// store is implemented.
+			return nil, fmt.Errorf("cannot fetch package %q from store %q: not implemented", pkg.Name, pkg.Store)
 		}
 
 		var candidates []*setup.Archive
@@ -550,11 +542,11 @@ func selectRemotePackages(archives map[string]archive.Archive, selection *setup.
 		if chosen == nil {
 			return nil, fmt.Errorf("cannot find package %q in archive(s)", pkg.RealName)
 		}
-		remotePackages[pkg.Name] = &debPackage{
+		packageRemotes[pkg.Name] = &archiveRemote{
 			archive: chosen,
 			name:    pkg.RealName,
 		}
 	}
 
-	return remotePackages, nil
+	return packageRemotes, nil
 }

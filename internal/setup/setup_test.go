@@ -428,7 +428,6 @@ var setupTests = []setupTest{{
 	},
 	selslices: []setup.SliceKey{{"mypkg1", "myslice1"}},
 	selection: &setup.Selection{
-		Arch: "amd64",
 		Slices: []*setup.Slice{{
 			Package: "mypkg1",
 			Name:    "myslice1",
@@ -452,7 +451,6 @@ var setupTests = []setupTest{{
 	},
 	selslices: []setup.SliceKey{{"mypkg2", "myslice2"}},
 	selection: &setup.Selection{
-		Arch: "amd64",
 		Slices: []*setup.Slice{{
 			Package: "mypkg1",
 			Name:    "myslice1",
@@ -1760,7 +1758,6 @@ var setupTests = []setupTest{{
 	},
 	selslices: []setup.SliceKey{{"mypkg", "myslice"}},
 	selection: &setup.Selection{
-		Arch: "amd64",
 		Slices: []*setup.Slice{{
 			Package: "mypkg",
 			Name:    "myslice",
@@ -4913,7 +4910,6 @@ func (s *S) TestSelectEmptyArch(c *C) {
 	selslice := []setup.SliceKey{{"mypkg", "myslice"}}
 	selection, err := setup.Select(release, selslice, "")
 	c.Assert(err, IsNil)
-	c.Assert(selection.Arch, Equals, arch)
 
 	var sliceNames []string
 	for _, s := range selection.Slices {

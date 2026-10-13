@@ -1,7 +1,6 @@
 package slicer
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/canonical/chisel/internal/archive"
@@ -27,21 +26,29 @@ func (p *RemotePackageInfo) PkgStore() string                { return p.Store }
 func (p *RemotePackageInfo) PkgDigestKind() cache.DigestKind { return p.DigestKind }
 func (p *RemotePackageInfo) PkgDigest() string               { return p.Digest }
 
-type RemotePackage interface {
+// PackageRemote represents the remote from which a package is obtained,
+// bound to a specific package.
+type PackageRemote interface {
+	// Arch returns the architecture the remote
+	// serves packages for, which is the target architecture used to request
+	// the package, not the architecture of the fetched package itself (which
+	// may be "all", for example).
+	Arch() string
 	Fetch() (io.ReadSeekCloser, *RemotePackageInfo, error)
 }
 
-var (
-	_ RemotePackage = (*debPackage)(nil)
-	_ RemotePackage = (*binPackage)(nil)
-)
+var _ PackageRemote = (*archiveRemote)(nil)
 
-type debPackage struct {
+type archiveRemote struct {
 	archive archive.Archive
 	name    string
 }
 
-func (d *debPackage) Fetch() (io.ReadSeekCloser, *RemotePackageInfo, error) {
+func (d *archiveRemote) Arch() string {
+	return d.archive.Options().Arch
+}
+
+func (d *archiveRemote) Fetch() (io.ReadSeekCloser, *RemotePackageInfo, error) {
 	reader, info, err := d.archive.Fetch(d.name)
 	if err != nil {
 		return nil, nil, err
@@ -53,14 +60,4 @@ func (d *debPackage) Fetch() (io.ReadSeekCloser, *RemotePackageInfo, error) {
 		DigestKind: cache.SHA256,
 		Digest:     info.SHA256,
 	}, nil
-}
-
-type binPackage struct {
-	name     string
-	realName string
-	store    string
-}
-
-func (b *binPackage) Fetch() (io.ReadSeekCloser, *RemotePackageInfo, error) {
-	return nil, nil, fmt.Errorf("cannot fetch package %q from store %q: not implemented", b.name, b.store)
 }
