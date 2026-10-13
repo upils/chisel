@@ -26,13 +26,12 @@ func (p *RemotePackageInfo) PkgStore() string                { return p.Store }
 func (p *RemotePackageInfo) PkgDigestKind() cache.DigestKind { return p.DigestKind }
 func (p *RemotePackageInfo) PkgDigest() string               { return p.Digest }
 
-// PackageRemote represents the remote from which a package is obtained,
-// bound to a specific package.
+// PackageRemote represents the remote from which a package is obtained.
 type PackageRemote interface {
-	// Arch returns the architecture the remote
-	// serves packages for, which is the target architecture used to request
-	// the package, not the architecture of the fetched package itself (which
-	// may be "all", for example).
+	// Arch returns the architecture the remote serves packages for, which is
+	// the target architecture used to request the package, not the
+	// architecture of the fetched package itself (which may be "all", for
+	// example).
 	Arch() string
 	Fetch() (io.ReadSeekCloser, *RemotePackageInfo, error)
 }

@@ -515,6 +515,7 @@ func selectPkgRemotes(archives map[string]archive.Archive, selection *setup.Sele
 			continue
 		}
 		pkg := selection.Release.Packages[s.Package]
+
 		if pkg.Store != "" {
 			// TODO: select the remote for the package from the store, which
 			// requires the arch, track and risk, when fetching from the
@@ -547,6 +548,5 @@ func selectPkgRemotes(archives map[string]archive.Archive, selection *setup.Sele
 			name:    pkg.RealName,
 		}
 	}
-
 	return pkgRemotes, nil
 }

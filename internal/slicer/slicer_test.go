@@ -219,11 +219,6 @@ var slicerTests = []slicerTest{{
 	summary: "Conditional architecture",
 	arch:    "amd64",
 	slices:  []setup.SliceKey{{"test-package", "myslice"}},
-	pkgs: []*testutil.TestPackage{{
-		Name: "test-package",
-		Arch: "all",
-		Data: testutil.PackageData["test-package"],
-	}},
 	release: map[string]string{
 		"slices/mydir/test-package.yaml": `
 			package: test-package
@@ -251,9 +246,6 @@ var slicerTests = []slicerTest{{
 		"/dir/nested/copy-3": "file 0644 84237a05 {test-package_myslice}",
 		"/dir/text-file-1":   "file 0644 5b41362b {test-package_myslice}",
 		"/dir/text-file-3":   "file 0644 5b41362b {test-package_myslice}",
-	},
-	manifestPkgs: map[string]string{
-		"test-package": "test-package version all hash",
 	},
 }, {
 	summary: "Copyright is not installed implicitly",
@@ -1987,29 +1979,21 @@ var slicerTests = []slicerTest{{
 		"/dir/file": "file 0644 cc55e2ec {test-package_third}",
 	},
 }, {
-	summary: "Store package fetching not yet implemented",
-	slices:  []setup.SliceKey{{"bin-store-pkg", "myslice"}},
-	arch:    "amd64",
+	summary: "Store package is not yet implemented",
+	slices:  []setup.SliceKey{{"bin-curl", "bin"}},
 	release: map[string]string{
 		"chisel.yaml": testutil.DefaultChiselYamlWithStores,
-		"slices/mydir/test-package.yaml": `
-			package: test-package
-			slices:
-				myslice:
-					contents:
-						/dir/file:
-		`,
-		"slices/mydir/store-pkg.yaml": `
-			package: store-pkg
+		"slices/curl.yaml": `
+			package: curl
 			store: bin
-			default-track: 3.1
+			default-track: latest
 			slices:
-				myslice:
+				bin:
 					contents:
-						/dir/store-file:
+						/usr/bin/curl:
 		`,
 	},
-	error: `cannot fetch package "bin-store-pkg" from store "bin": not implemented`,
+	error: `cannot fetch package "bin-curl" from store "bin": not implemented`,
 }}
 
 func (s *S) TestRun(c *C) {
