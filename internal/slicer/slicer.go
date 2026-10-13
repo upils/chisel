@@ -517,9 +517,6 @@ func selectPkgRemotes(archives map[string]archive.Archive, selection *setup.Sele
 		pkg := selection.Release.Packages[s.Package]
 
 		if pkg.Store != "" {
-			// TODO: select the remote for the package from the store, which
-			// requires the arch, track and risk, when fetching from the
-			// store is implemented.
 			return nil, fmt.Errorf("cannot fetch package %q from store %q: not implemented", pkg.Name, pkg.Store)
 		}
 
