@@ -6,26 +6,22 @@ import (
 	"github.com/ulikunitz/xz"
 )
 
-type Pkg struct {
-	reader io.ReadSeekCloser
-}
-
-func Open(reader io.ReadSeekCloser) *Pkg {
-	return &Pkg{reader: reader}
-}
-
-func (p *Pkg) TarStream() (io.ReadCloser, error) {
-	_, err := p.reader.Seek(0, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-	xzReader, err := xz.NewReader(p.reader)
+// DataReader takes a Reader for a bin package (an XZ-compressed tarball) and
+// returns a Reader to the inner tarball.
+func DataReader(pkgReader io.Reader) (io.ReadCloser, error) {
+	xzReader, err := xz.NewReader(pkgReader)
 	if err != nil {
 		return nil, err
 	}
 	return io.NopCloser(xzReader), nil
 }
 
-func (p *Pkg) Close() error {
-	return p.reader.Close()
+func OpenTar(pkgReader io.ReadSeeker) func() (io.ReadCloser, error) {
+	return func() (io.ReadCloser, error) {
+		_, err := pkgReader.Seek(0, io.SeekStart)
+		if err != nil {
+			return nil, err
+		}
+		return DataReader(pkgReader)
+	}
 }

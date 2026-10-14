@@ -512,7 +512,7 @@ func (s *S) TestExtract(c *C) {
 			test.hackopt(c, &options)
 		}
 
-		err := tarball.Extract(test.pkg, &options)
+		err := tarball.Extract(test.pkg.OpenTar(), &options)
 		if test.error != "" {
 			c.Assert(err, ErrorMatches, test.error)
 			continue
@@ -623,7 +623,7 @@ func (s *S) TestExtractCreateCallback(c *C) {
 			return nil
 		}
 
-		err := tarball.Extract(test.pkg, &options)
+		err := tarball.Extract(test.pkg.OpenTar(), &options)
 		c.Assert(err, IsNil)
 
 		c.Assert(createExtractInfos, DeepEquals, test.calls)

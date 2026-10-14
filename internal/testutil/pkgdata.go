@@ -108,6 +108,15 @@ func makeTar(entries []TarEntry) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// MustMakeTar returns the tar stream holding the given entries.
+func MustMakeTar(entries []TarEntry) []byte {
+	data, err := makeTar(entries)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
 func compressBytesZstd(input []byte) ([]byte, error) {
 	var buf bytes.Buffer
 	writer, err := zstd.NewWriter(&buf)

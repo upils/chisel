@@ -16,12 +16,11 @@ import (
 	"github.com/canonical/chisel/internal/control"
 	"github.com/canonical/chisel/internal/deb"
 	"github.com/canonical/chisel/internal/pgputil"
-	"github.com/canonical/chisel/internal/tarball"
 )
 
 type Archive interface {
 	Options() *Options
-	Fetch(pkg string) (tarball.TarStreamer, *PackageInfo, error)
+	Fetch(pkg string) (io.ReadSeekCloser, *PackageInfo, error)
 	Exists(pkg string) bool
 	Info(pkg string) (*PackageInfo, error)
 }
@@ -141,7 +140,7 @@ func (a *ubuntuArchive) selectPackage(pkg string) (control.Section, *ubuntuIndex
 	return selectedSection, selectedIndex, nil
 }
 
-func (a *ubuntuArchive) Fetch(pkg string) (tarball.TarStreamer, *PackageInfo, error) {
+func (a *ubuntuArchive) Fetch(pkg string) (io.ReadSeekCloser, *PackageInfo, error) {
 	section, index, err := a.selectPackage(pkg)
 	if err != nil {
 		return nil, nil, err
@@ -154,7 +153,7 @@ func (a *ubuntuArchive) Fetch(pkg string) (tarball.TarStreamer, *PackageInfo, er
 		return nil, nil, err
 	}
 	info := sectionPackageInfo(section)
-	return deb.Open(reader), info, nil
+	return reader, info, nil
 }
 
 func (a *ubuntuArchive) Info(pkg string) (*PackageInfo, error) {

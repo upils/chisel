@@ -16,13 +16,6 @@ import (
 	"github.com/canonical/chisel/internal/strdist"
 )
 
-type TarStreamer interface {
-	// TarStream returns a reader over the raw, unparsed tar stream.
-	// Each call returns a fresh stream, from its start.
-	TarStream() (io.ReadCloser, error)
-	io.Closer
-}
-
 type ExtractOptions struct {
 	Package   string
 	TargetDir string
@@ -64,7 +57,11 @@ func getValidOptions(options *ExtractOptions) (*ExtractOptions, error) {
 	return options, nil
 }
 
-func Extract(pkgReader TarStreamer, options *ExtractOptions) (err error) {
+// OpenTarFunc opens a fresh reader over a package's inner tar stream.
+// Each call must return a stream from its start.
+type OpenTarFunc func() (io.ReadCloser, error)
+
+func Extract(openTar OpenTarFunc, options *ExtractOptions) (err error) {
 	defer func() {
 		if err != nil {
 			err = fmt.Errorf("cannot extract from package %q: %w", options.Package, err)
@@ -85,11 +82,11 @@ func Extract(pkgReader TarStreamer, options *ExtractOptions) (err error) {
 		return err
 	}
 
-	return extractEntries(pkgReader, validOpts)
+	return extractEntries(openTar, validOpts)
 }
 
-func extractEntries(pkgReader TarStreamer, options *ExtractOptions) error {
-	tarStream, err := pkgReader.TarStream()
+func extractEntries(openTar OpenTarFunc, options *ExtractOptions) error {
+	tarStream, err := openTar()
 	if err != nil {
 		return err
 	}
@@ -267,7 +264,7 @@ func extractEntries(pkgReader TarStreamer, options *ExtractOptions) error {
 			ExtractOptions: options,
 			pendingLinks:   pendingHardLinks,
 		}
-		err = extractHardLinks(pkgReader, extractHardLinkOptions)
+		err := extractHardLinks(openTar, extractHardLinkOptions)
 		if err != nil {
 			return err
 		}
@@ -301,8 +298,8 @@ type extractHardLinkOptions struct {
 
 // extractHardLinks iterates through the tarball a second time to extract the
 // hard links that were not extracted in the first pass.
-func extractHardLinks(pkgReader TarStreamer, opts *extractHardLinkOptions) error {
-	tarStream, err := pkgReader.TarStream()
+func extractHardLinks(openTar OpenTarFunc, opts *extractHardLinkOptions) error {
+	tarStream, err := openTar()
 	if err != nil {
 		return err
 	}

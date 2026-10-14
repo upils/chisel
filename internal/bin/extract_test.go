@@ -2,37 +2,40 @@ package bin_test
 
 import (
 	"archive/tar"
+	"bytes"
 
 	. "gopkg.in/check.v1"
 
 	"github.com/canonical/chisel/internal/bin"
-	"github.com/canonical/chisel/internal/tarball"
 	"github.com/canonical/chisel/internal/testutil"
 )
 
-var _ tarball.TarStreamer = (*bin.Pkg)(nil)
-
-func (s *S) TestPkgTarStream(c *C) {
-	pkg := testutil.NewBinPkg(testutil.MustMakeBin([]testutil.TarEntry{
+func (s *S) TestDataReader(c *C) {
+	data := testutil.MustMakeBin([]testutil.TarEntry{
 		testutil.Dir(0o755, "./"),
 		testutil.Reg(0o644, "./file", "content"),
-	}))
+	})
 
-	// Each call returns a fresh stream over the same content.
-	for range 2 {
-		tarStream, err := pkg.TarStream()
-		c.Assert(err, IsNil)
-		tarReader := tar.NewReader(tarStream)
-		_, err = tarReader.Next()
-		c.Assert(err, IsNil)
-		err = tarStream.Close()
-		c.Assert(err, IsNil)
-	}
+	dataReader, err := bin.DataReader(bytes.NewReader(data))
+	c.Assert(err, IsNil)
+	tarReader := tar.NewReader(dataReader)
+	_, err = tarReader.Next()
+	c.Assert(err, IsNil)
 }
 
-func (s *S) TestPkgTarStreamInvalid(c *C) {
-	pkg := testutil.NewBinPkg([]byte("not an xz stream"))
-
-	_, err := pkg.TarStream()
+func (s *S) TestDataReaderInvalid(c *C) {
+	_, err := bin.DataReader(bytes.NewReader([]byte("not an xz stream")))
 	c.Assert(err, ErrorMatches, "xz.*")
+}
+
+func (s *S) TestOpenTar(c *C) {
+	data := testutil.MustMakeBin([]testutil.TarEntry{
+		testutil.Dir(0o755, "./"),
+		testutil.Reg(0o644, "./file", "content"),
+	})
+	pkgReader := testutil.ReadSeekNopCloser(bytes.NewReader(data))
+	openTar := bin.OpenTar(pkgReader)
+
+	// Each call must return a fresh stream over the same content.
+	testutil.CheckOpenTar(c, openTar)
 }
